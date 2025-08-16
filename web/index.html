@@ -51,7 +51,7 @@
   </div>
   
   <div class="controls">
-    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • R: Reset
+    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • C: Debug • R: Reset
   </div>
 
   <script src="https://unpkg.com/planck-js@0.3.0/dist/planck.min.js"></script>
@@ -105,6 +105,8 @@
       
       async function loadAssets() {
         console.log('🎮 Starting asset loading...');
+        console.log('📍 Current location:', window.location.href);
+        console.log('📂 Base directory:', window.location.origin + window.location.pathname.replace('/web/index.html', ''));
         
         // Define asset paths to try (in order of preference)
         const assetPaths = {
@@ -135,6 +137,7 @@
               const currentPath = paths[attemptIndex];
               
               console.log(`📷 Trying ${name} from: ${currentPath}`);
+              console.log(`🔗 Full URL will be: ${new URL(currentPath, window.location.href).href}`);
               
               img.onload = () => {
                 console.log(`✅ ${name} loaded successfully from: ${currentPath}`);
@@ -180,7 +183,8 @@
       const game = {
         camera: { x: 0, y: 0, zoom: 0.8, minZoom: 0.2, maxZoom: 3.0 },
         throttle: 0.4,
-        keys: new Set()
+        keys: new Set(),
+        showCollision: false
       };
       
       // =============================================================================
@@ -189,8 +193,14 @@
       
       window.addEventListener('keydown', (e) => {
         game.keys.add(e.key.toLowerCase());
-        if (['w','s','a','d','q','e','arrowleft','arrowright','r'].includes(e.key.toLowerCase())) {
+        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c'].includes(e.key.toLowerCase())) {
           e.preventDefault();
+        }
+        
+        // Toggle collision debug view
+        if (e.key.toLowerCase() === 'c') {
+          game.showCollision = !game.showCollision;
+          console.log('🔍 Collision debug:', game.showCollision ? 'ON' : 'OFF');
         }
       });
       
@@ -209,10 +219,10 @@
       // PHYSICS
       // =============================================================================
       
-      // Create aircraft
+      // Create aircraft - spawn in center of map
       const aircraft = world.createBody({
         type: 'dynamic',
-        position: pl.Vec2(200, 400),
+        position: pl.Vec2(0, 200), // Center of map, above ground
         angle: 0,
         linearDamping: 0.1,
         angularDamping: 0.9
@@ -225,17 +235,48 @@
         restitution: 0.1
       });
       
-      // Create ground (simple rectangle for collision)
-      const ground = world.createBody({
-        type: 'static',
-        position: pl.Vec2(0, 800)
-      });
+      // Create ground collision bodies that match the visible terrain
+      const groundBodies = [];
       
-      ground.createFixture({
-        shape: pl.Box(WORLD_WIDTH, 50),
-        friction: 1.0,
-        restitution: 0.1
-      });
+      function createGroundCollision() {
+        // Create multiple ground segments to match terrain features in map.png
+        const groundSegments = [
+          // Main ground level across the map
+          { x: 0, y: 1400, width: WORLD_WIDTH, height: 200 },
+          
+          // Additional terrain features (adjust these based on your map)
+          { x: -1500, y: 1200, width: 800, height: 100 },   // Left terrain
+          { x: 1500, y: 1200, width: 800, height: 100 },    // Right terrain
+          { x: -500, y: 1000, width: 400, height: 80 },     // Hills/elevated areas
+          { x: 500, y: 1000, width: 400, height: 80 },
+          
+          // Mountains or elevated terrain
+          { x: -1000, y: 800, width: 300, height: 200 },
+          { x: 1000, y: 800, width: 300, height: 200 },
+        ];
+        
+        groundSegments.forEach((segment, index) => {
+          const groundBody = world.createBody({
+            type: 'static',
+            position: pl.Vec2(segment.x, segment.y)
+          });
+          
+          groundBody.createFixture({
+            shape: pl.Box(segment.width / 2, segment.height / 2),
+            friction: 0.9,
+            restitution: 0.2
+          });
+          
+          groundBodies.push({
+            body: groundBody,
+            ...segment
+          });
+        });
+        
+        console.log(`🏔️ Created ${groundSegments.length} ground collision segments`);
+      }
+      
+      createGroundCollision();
       
       // =============================================================================
       // PHYSICS UPDATE
@@ -259,7 +300,7 @@
         
         // Reset
         if (reset) {
-          aircraft.setTransform(pl.Vec2(200, 400), 0);
+          aircraft.setTransform(pl.Vec2(0, 200), 0); // Reset to center of map
           aircraft.setLinearVelocity(pl.Vec2(0, 0));
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
@@ -378,6 +419,22 @@
         }
         
         ctx.restore();
+        
+        // Debug: Draw collision boundaries (press 'C' to toggle)
+        if (game.showCollision) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+          ctx.lineWidth = 2;
+          
+          groundBodies.forEach(ground => {
+            const pos = worldToScreen(ground.x - ground.width/2, ground.y - ground.height/2);
+            const width = ground.width * SCALE * game.camera.zoom;
+            const height = ground.height * SCALE * game.camera.zoom;
+            ctx.strokeRect(pos.x, pos.y, width, height);
+          });
+          
+          ctx.restore();
+        }
       }
       
       function updateHUD() {
