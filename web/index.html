@@ -292,7 +292,7 @@
         type: 'dynamic',
         position: pl.Vec2(0, -600), // 600 m above ground level (y=0)
         angle: 0,
-        linearDamping: 0.1,
+        linearDamping: 0.02, // Reduced from 0.1 for higher top speeds
         angularDamping: 2.5 // High damping for instant pitch stop when controls released
       });
       
@@ -440,8 +440,8 @@
         if (rollLeft) aircraft.applyTorque(-torque * 0.7, true);
         if (rollRight) aircraft.applyTorque(torque * 0.7, true);
         
-        // Thrust - Increased engine power
-        const maxThrust = 60000; // Doubled from 30000 for more power
+        // Thrust - Further increased for higher top speeds
+        const maxThrust = 120000; // Quadrupled from original 30000 for much higher speeds
         const thrust = game.throttle * maxThrust;
         const thrustX = Math.cos(angle) * thrust;
         const thrustY = Math.sin(angle) * thrust;
@@ -465,8 +465,8 @@
             Math.sin(liftAngle) * liftMag
           ), true);
           
-          // Drag - Further reduced for higher top speeds
-          const dragCoeff = 0.02 + Math.abs(liftCoeff) * 0.025; // Quarter of original for much higher speeds
+          // Drag - Minimized for very high top speeds
+          const dragCoeff = 0.01 + Math.abs(liftCoeff) * 0.01; // Much lower drag for speeds well above 120 m/s
           const dragMag = q * wingArea * dragCoeff;
           aircraft.applyForceToCenter(pl.Vec2(
             -vel.x * dragMag / speed,
