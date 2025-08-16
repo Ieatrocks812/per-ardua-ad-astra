@@ -466,6 +466,12 @@
       const fireRate = 600; // rounds per minute
       const fireInterval = 60000 / fireRate; // ms between shots
       
+      // Projectile size settings (world units - stays same relative to plane/map regardless of zoom)
+      const BULLET_SIZE = 1.5; // world units
+      const TRACER_LENGTH = 8.0; // world units  
+      const TRACER_WIDTH = 2.0; // world units
+      const CASING_SIZE = 2.5; // world units
+      
       function trySpawnGuns() {
         console.log('🔫 trySpawnGuns called');
         const now = performance.now();
@@ -957,25 +963,22 @@
           ctx.rotate(angle);
           
           if (proj.type === 'tracer') {
-            // Tracer gets smaller as it slows down
+            // Tracer gets smaller as it slows down, but maintains world scale
             const speedRatio = speed / proj.initialSpeed;
-            const tracerLength = Math.max(12, 24 * speedRatio * game.camera.zoom); // Minimum 12px, scales with zoom
-            const tracerWidth = Math.max(5, 10 * speedRatio * game.camera.zoom); // Minimum 5px, scales with zoom
+            const tracerLength = TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom;
+            const tracerWidth = TRACER_WIDTH * speedRatio * SCALE * game.camera.zoom;
             
             if (assets.loaded.tracer && assets.tracer) {
               const scale = tracerLength / assets.tracer.naturalWidth;
               ctx.drawImage(assets.tracer, -tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
             } else {
-              // Fallback tracer - made more visible
-              ctx.fillStyle = `rgba(255, 100, 50, ${Math.max(0.5, 0.8 * speedRatio)})`;
-              ctx.strokeStyle = '#FF0000';
-              ctx.lineWidth = 1;
+              // Fallback tracer - bright orange/yellow, no red
+              ctx.fillStyle = `rgba(255, 165, 0, ${Math.max(0.6, 0.9 * speedRatio)})`; // Orange instead of red
               ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
-              ctx.strokeRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
             }
           } else {
-            // Regular bullet
-            const bulletSize = Math.max(7, 12 * game.camera.zoom); // Minimum 7px, scales with zoom
+            // Regular bullet - world scale
+            const bulletSize = BULLET_SIZE * SCALE * game.camera.zoom;
             
             if (assets.loaded.bullet && assets.bullet) {
               const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
@@ -983,12 +986,9 @@
               const h = assets.bullet.naturalHeight * scale;
               ctx.drawImage(assets.bullet, -w/2, -h/2, w, h);
             } else {
-              // Fallback bullet - made more visible
+              // Fallback bullet - bright gold/yellow
               ctx.fillStyle = '#FFD700';
-              ctx.strokeStyle = '#FF0000';
-              ctx.lineWidth = 2;
               ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
-              ctx.strokeRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
             }
           }
           
@@ -1003,7 +1003,7 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(casing.rotation);
           
-          const casingSize = Math.max(9, 14 * game.camera.zoom); // Minimum 9px, scales with zoom
+          const casingSize = CASING_SIZE * SCALE * game.camera.zoom;
           
           if (assets.loaded.casing && assets.casing) {
             const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
@@ -1011,12 +1011,9 @@
             const h = assets.casing.naturalHeight * scale;
             ctx.drawImage(assets.casing, -w/2, -h/2, w, h);
           } else {
-            // Fallback casing - made more visible
-            ctx.fillStyle = '#DAA520'; // Dark golden rod
-            ctx.strokeStyle = '#FF0000'; // Red outline for visibility
-            ctx.lineWidth = 2;
+            // Fallback casing - brass colored
+            ctx.fillStyle = '#DAA520'; // Dark golden rod (brass color)
             ctx.fillRect(-casingSize/2, -casingSize/3, casingSize, casingSize*2/3);
-            ctx.strokeRect(-casingSize/2, -casingSize/3, casingSize, casingSize*2/3);
           }
           
           ctx.restore();
