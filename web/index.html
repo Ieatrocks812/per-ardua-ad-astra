@@ -493,10 +493,10 @@
         // ENEMY SYSTEM
         // =============================================================================
         
-        // Enemy spawning system
-        let lastSpawnTime = 0;
-        const spawnInterval = 15000; // Spawn new formation every 15 seconds
-        let formationCounter = 0;
+        // Enemy spawning system variables (initialize explicitly)
+        var lastSpawnTime = 0;
+        var spawnInterval = 15000; // Spawn new formation every 15 seconds
+        var formationCounter = 0;
         
         function createInitialEnemies() {
           console.log('✈️ Creating initial enemy aircraft formations...');
