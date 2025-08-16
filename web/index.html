@@ -957,7 +957,7 @@
             });
             
             escortBody.createFixture({
-              shape: pl.Box(3, 1), // Smaller fighter (6m x 2m)
+              shape: pl.Box(6, 2), // Doubled fighter size (12m x 4m)
               density: 15,
               friction: 0.3,
               restitution: 0.1
@@ -1055,7 +1055,57 @@
             const angle = enemy.body.getAngle();
             const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
             
-            // AI behavior handled below for all enemy types
+            // AI behavior for BF-109 fighters
+            if (enemy.type === 'bf109') {
+              const playerPos = aircraft.getPosition();
+              const distanceToPlayer = Math.sqrt(
+                (pos.x - playerPos.x) * (pos.x - playerPos.x) + 
+                (pos.y - playerPos.y) * (pos.y - playerPos.y)
+              );
+              
+              // Switch to chase mode if player is within 300m (150 physics units)
+              if (distanceToPlayer < 150 && enemy.mode === 'escort') {
+                enemy.mode = 'chase';
+                console.log('🎯 BF-109 engaging player!');
+              }
+              
+              // Return to escort if player escapes far enough (500m)
+              if (distanceToPlayer > 250 && enemy.mode === 'chase') {
+                enemy.mode = 'escort';
+                console.log('✈️ BF-109 returning to escort');
+              }
+              
+              // Chase behavior
+              if (enemy.mode === 'chase') {
+                // Calculate angle to player
+                const angleToPlayer = Math.atan2(
+                  playerPos.y - pos.y,
+                  playerPos.x - pos.x
+                );
+                
+                // Turn toward player
+                const currentAngle = enemy.body.getAngle();
+                let angleDiff = angleToPlayer - currentAngle;
+                
+                // Normalize angle difference
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                
+                // Apply turning torque
+                const turnTorque = angleDiff * 20000;
+                enemy.body.applyTorque(turnTorque, true);
+                
+                // Update facing direction for sprite
+                enemy.facingDirection = Math.cos(angleToPlayer) > 0 ? 'right' : 'left';
+                
+                // Increase thrust when chasing
+                enemy.targetSpeed = 150; // Faster when chasing
+              } else {
+                // Normal escort behavior
+                enemy.targetSpeed = 120;
+                enemy.facingDirection = 'left'; // Default facing left
+              }
+            }
             
             // Use same physics as player aircraft but with AI controls
             
@@ -1468,6 +1518,45 @@
       world.on('begin-contact', (contact) => {
         const bodyA = contact.getFixtureA().getBody();
         const bodyB = contact.getFixtureB().getBody();
+        
+        // Check for aircraft-enemy collision (plane to plane)
+        const isAircraftA = bodyA === aircraft;
+        const isAircraftB = bodyB === aircraft;
+        const enemyDataA = bodyA.getUserData();
+        const enemyDataB = bodyB.getUserData();
+        const enemyA = enemyDataA?.type === 'enemy' ? enemyDataA.enemy : null;
+        const enemyB = enemyDataB?.type === 'enemy' ? enemyDataB.enemy : null;
+        
+        if ((isAircraftA && enemyB) || (isAircraftB && enemyA)) {
+          const enemy = enemyA || enemyB;
+          
+          if (!enemy.destroyed) {
+            console.log('✈️💥 Mid-air collision with enemy!');
+            
+            // Major damage to both aircraft
+            game.crashed = true;
+            enemy.health = Math.max(0, enemy.health - 7);
+            
+            // Destroy enemy if killed
+            if (enemy.health <= 0) {
+              destroyEnemy(enemy);
+            }
+            
+            // Apply collision forces to separate aircraft
+            const playerVel = aircraft.getLinearVelocity();
+            const enemyVel = enemy.body.getLinearVelocity();
+            
+            // Bounce apart
+            aircraft.setLinearVelocity(pl.Vec2(playerVel.x * -0.5, playerVel.y * 0.3));
+            enemy.body.setLinearVelocity(pl.Vec2(enemyVel.x * -0.5, enemyVel.y * 0.3));
+            
+            // Add spin from collision
+            aircraft.setAngularVelocity(aircraft.getAngularVelocity() + (Math.random() - 0.5) * 10);
+            enemy.body.setAngularVelocity(enemy.body.getAngularVelocity() + (Math.random() - 0.5) * 10);
+          }
+          
+          return; // Skip ground check if we hit an enemy
+        }
         
         // Enhanced ground collision for realistic landing/takeoff
         if ((bodyA === aircraft || bodyB === aircraft)) {
@@ -2007,7 +2096,7 @@
             // BF-109 rendering
             ctx.rotate(angle);
             
-            const baseSize = 8 * SCALE * game.camera.zoom; // Smaller fighters
+            const baseSize = 16 * SCALE * game.camera.zoom; // Doubled fighter size
             let sprite = null;
             let spriteLoaded = false;
             
