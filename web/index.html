@@ -213,6 +213,15 @@
       // Start loading assets
       loadAssets();
       
+      // Debug: Log initial game state
+      setTimeout(() => {
+        console.log('🚀 Initial game state at startup:', {
+          inverted: game.inverted,
+          gearDown: game.gearDown,
+          expectedSprite: 'Should be normal Spitfire facing right (no gear)'
+        });
+      }, 1000);
+      
       // =============================================================================
       // GAME STATE
       // =============================================================================
@@ -248,21 +257,18 @@
         
         // Toggle inverted flight mode
         if (key === 'f') {
+          const oldInverted = game.inverted;
           game.inverted = !game.inverted;
-          console.log('🔄 Flight mode:', game.inverted ? 'INVERTED' : 'NORMAL');
+          console.log('🔄 Flight mode changed:', oldInverted ? 'INVERTED' : 'NORMAL', '→', game.inverted ? 'INVERTED' : 'NORMAL');
+          console.log('🔄 F key - Game state after flip:', { inverted: game.inverted, gearDown: game.gearDown });
         }
         
         // Toggle landing gear
         if (key === 'g') {
+          const oldGear = game.gearDown;
           game.gearDown = !game.gearDown;
-          console.log('🛬 Landing gear:', game.gearDown ? 'DOWN' : 'UP');
-          console.log('🎮 Current game state:', { inverted: game.inverted, gearDown: game.gearDown });
-          console.log('🎨 Sprite selection logic:', {
-            'inverted && gearDown': game.inverted && game.gearDown,
-            'inverted && !gearDown': game.inverted && !game.gearDown,
-            '!inverted && gearDown': !game.inverted && game.gearDown,
-            'normal': !game.inverted && !game.gearDown
-          });
+          console.log('🛬 Gear changed:', oldGear ? 'DOWN' : 'UP', '→', game.gearDown ? 'DOWN' : 'UP');
+          console.log('🛬 G key - Game state after gear toggle:', { inverted: game.inverted, gearDown: game.gearDown });
         }
       });
       
@@ -557,12 +563,15 @@
         const screenPos = worldToScreen(pos.x, pos.y);
         
         // Debug: Log aircraft state periodically
-        if (Math.random() < 0.01) { // 1% chance per frame for occasional logging
+        if (Math.random() < 0.02) { // 2% chance per frame for debugging
           console.log('✈️ Aircraft state:', {
             angle: (angle * 180 / Math.PI).toFixed(1) + '°',
             inverted: game.inverted,
             gearDown: game.gearDown,
-            position: { x: pos.x.toFixed(1), y: pos.y.toFixed(1) }
+            position: { x: pos.x.toFixed(1), y: pos.y.toFixed(1) },
+            expectedSprite: game.inverted && game.gearDown ? 'inverted+gear' : 
+                          game.inverted && !game.gearDown ? 'inverted' :
+                          !game.inverted && game.gearDown ? 'normal+gear' : 'normal'
           });
         }
         
