@@ -480,18 +480,13 @@
         const angle = aircraft.getAngle();
         const vel = aircraft.getLinearVelocity();
         
-        // Wing gun positions (front of wings)
-        const wingSpread = 3.0; // Distance from center to wing guns (scaled physics)
-        const wingForward = 1.5; // Forward from center to gun muzzles
+        // Center gun position (middle of plane)
+        const gunForward = 2.0; // Forward from center to gun muzzle
         
-        // Calculate gun positions
-        const leftGunPos = {
-          x: pos.x + Math.cos(angle) * wingForward - Math.sin(angle) * wingSpread,
-          y: pos.y + Math.sin(angle) * wingForward + Math.cos(angle) * wingSpread
-        };
-        const rightGunPos = {
-          x: pos.x + Math.cos(angle) * wingForward + Math.sin(angle) * wingSpread,
-          y: pos.y + Math.sin(angle) * wingForward - Math.cos(angle) * wingSpread
+        // Calculate gun position (center of plane)
+        const gunPos = {
+          x: pos.x + Math.cos(angle) * gunForward,
+          y: pos.y + Math.sin(angle) * gunForward
         };
         
         // Muzzle velocity (relative to aircraft)
@@ -501,28 +496,17 @@
           y: vel.y + Math.sin(angle) * muzzleVelocity
         };
         
-        // Spawn bullets and tracers (every 5th round is a tracer)
-        const isTracer = game.projectiles.length % 5 === 0;
+        // Spawn bullets and tracers (every 4th round is a tracer: bullet, bullet, bullet, tracer)
+        const isTracer = (game.projectiles.length + 1) % 4 === 0;
         
-        // Left gun
+        // Center gun
         game.projectiles.push({
-          x: leftGunPos.x,
-          y: leftGunPos.y,
+          x: gunPos.x,
+          y: gunPos.y,
           vx: bulletVel.x,
           vy: bulletVel.y,
           type: isTracer ? 'tracer' : 'bullet',
           life: 5.0, // 5 seconds max flight time
-          initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y)
-        });
-        
-        // Right gun
-        game.projectiles.push({
-          x: rightGunPos.x,
-          y: rightGunPos.y,
-          vx: bulletVel.x,
-          vy: bulletVel.y,
-          type: isTracer ? 'tracer' : 'bullet',
-          life: 5.0,
           initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y)
         });
         
@@ -966,8 +950,8 @@
           if (proj.type === 'tracer') {
             // Tracer gets smaller as it slows down
             const speedRatio = speed / proj.initialSpeed;
-            const tracerLength = Math.max(50, 100 * speedRatio * game.camera.zoom); // GIANT for testing
-            const tracerWidth = Math.max(20, 40 * speedRatio * game.camera.zoom); // GIANT for testing
+            const tracerLength = Math.max(60, 120 * speedRatio * game.camera.zoom); // Slightly bigger
+            const tracerWidth = Math.max(25, 50 * speedRatio * game.camera.zoom); // Slightly bigger
             
             if (assets.loaded.tracer && assets.tracer) {
               const scale = tracerLength / assets.tracer.naturalWidth;
@@ -982,7 +966,7 @@
             }
           } else {
             // Regular bullet
-            const bulletSize = Math.max(30, 50 * game.camera.zoom); // GIANT for testing
+            const bulletSize = Math.max(35, 60 * game.camera.zoom); // Slightly bigger
             
             if (assets.loaded.bullet && assets.bullet) {
               const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
@@ -1010,7 +994,7 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(casing.rotation);
           
-          const casingSize = Math.max(40, 60 * game.camera.zoom); // GIANT for testing
+          const casingSize = Math.max(45, 70 * game.camera.zoom); // Slightly bigger
           
           if (assets.loaded.casing && assets.casing) {
             const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
