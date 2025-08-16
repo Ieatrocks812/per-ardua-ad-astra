@@ -67,13 +67,13 @@
       const ctx = canvas.getContext('2d');
       const pl = window.planck;
       
-      // Constants - Physics world scaling for higher speeds
-      const PHYSICS_SCALE = 0.1; // Physics objects are 10x smaller for higher speeds
-      const VISUAL_SCALE = 10.0; // Visual rendering compensates with 10x scaling
-      const SCALE = 20 * VISUAL_SCALE; // Base pixels per meter (200 after scaling)
+      // Constants - Physics world scaling for higher speeds (more reasonable scaling)
+      const PHYSICS_SCALE = 0.5; // Physics objects are 2x smaller for higher speeds
+      const VISUAL_SCALE = 2.0; // Visual rendering compensates with 2x scaling  
+      const SCALE = 20 * VISUAL_SCALE; // Base pixels per meter (40 after scaling)
       const WORLD_WIDTH = 4000 * PHYSICS_SCALE; // Physics: 400 units (visually 4000m)
       const WORLD_HEIGHT = 3000 * PHYSICS_SCALE; // Physics: 300 units (visually 3000m)
-      const MAP_BOTTOM_ALTITUDE = 60; // Physics: 60 units above ground (visually 600m)
+      const MAP_BOTTOM_ALTITUDE = 300; // Physics: 300 units above ground (visually 600m)
       
       // Physics world
       const world = new pl.World(pl.Vec2(0, 9.81));
@@ -317,14 +317,14 @@
       // Create aircraft - spawn above ground within main map (scaled physics)
       const aircraft = world.createBody({
         type: 'dynamic',
-        position: pl.Vec2(0, -60), // 60 physics units above ground (visually 600m)
+        position: pl.Vec2(0, -300), // 300 physics units above ground (visually 600m)
         angle: 0,
         linearDamping: 0.02, // Reduced from 0.1 for higher top speeds
         angularDamping: 2.5 // High damping for instant pitch stop when controls released
       });
       
       aircraft.createFixture({
-        shape: pl.Box(0.8, 0.25), // 1.6m x 0.5m aircraft (scaled down 10x)
+        shape: pl.Box(4, 1.25), // 8m x 2.5m aircraft (scaled down 2x)
         density: 20, // kg/m²
         friction: 0.3,
         restitution: 0.1
@@ -336,8 +336,8 @@
       function createGroundCollision() {
         // Create infinite ground collision at y=0 (physical ground - scaled)
         const groundLevel = 0; // ground at 0 altitude
-        const halfThickness = 0.05; // scaled down collision thickness
-        const infiniteWidth = 10000; // Very wide ground - scaled down
+        const halfThickness = 0.25; // scaled down collision thickness (2x scaling)
+        const infiniteWidth = 50000; // Very wide ground - scaled down (2x scaling)
         
         const groundBody = world.createBody({
           type: 'static',
@@ -438,7 +438,7 @@
         
         // Reset
         if (reset) {
-          aircraft.setTransform(pl.Vec2(0, -60), 0); // Reset to safe altitude above ground (scaled)
+          aircraft.setTransform(pl.Vec2(0, -300), 0); // Reset to safe altitude above ground (scaled)
           aircraft.setLinearVelocity(pl.Vec2(0, 0));
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
