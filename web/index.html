@@ -532,13 +532,7 @@
         
         ctx.save();
         ctx.translate(screenPos.x, screenPos.y);
-        
-        // Fix sprite orientation - the "normal" sprites appear to be upside down
-        if (game.inverted) {
-          ctx.rotate(angle); // Inverted mode uses normal rotation
-        } else {
-          ctx.rotate(angle + Math.PI); // Normal mode needs 180° rotation to appear right-side up
-        }
+        ctx.rotate(angle);
         
         // Choose sprite based on inverted mode and gear state
         let currentSprite, spriteLoaded;
