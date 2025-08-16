@@ -462,6 +462,7 @@
       // =============================================================================
       
       let lastFireTime = 0;
+      let shotCounter = 0; // Dedicated counter for tracer pattern
       const fireRate = 600; // rounds per minute
       const fireInterval = 60000 / fireRate; // ms between shots
       
@@ -495,8 +496,11 @@
           y: vel.y + Math.sin(angle) * muzzleVelocity
         };
         
+        // Increment shot counter and determine tracer pattern
+        shotCounter++;
         // Spawn bullets and tracers (every 4th round is a tracer: bullet, bullet, bullet, tracer)
-        const isTracer = (game.projectiles.length + 1) % 4 === 0;
+        const isTracer = shotCounter % 4 === 0;
+        console.log(`🎯 Shot #${shotCounter}: ${isTracer ? 'TRACER' : 'BULLET'} (pattern: ${shotCounter % 4})`);
         
         // Center gun
         game.projectiles.push({
