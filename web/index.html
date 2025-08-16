@@ -331,7 +331,7 @@
       
       createGroundCollision();
       
-      // Add collision detection for crashing
+      // Add collision detection for landing/crashing system
       world.on('begin-contact', (contact) => {
         const bodyA = contact.getFixtureA().getBody();
         const bodyB = contact.getFixtureB().getBody();
@@ -339,18 +339,46 @@
         // Check if aircraft hit ground
         if ((bodyA === aircraft || bodyB === aircraft)) {
           const vel = aircraft.getLinearVelocity();
-          const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+          const verticalSpeed = Math.abs(vel.y); // Vertical component only
+          const totalSpeed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
           
-          // Crash if hitting ground too fast
-          if (speed > 15) {
+          console.log(`🛬 Ground contact - Vertical: ${verticalSpeed.toFixed(1)} m/s, Total: ${totalSpeed.toFixed(1)} m/s, Gear: ${game.gearDown ? 'DOWN' : 'UP'}`);
+          
+          // Define crash threshold for vertical speed
+          const crashThreshold = 8.0; // m/s vertical speed threshold
+          const hardLandingThreshold = 4.0; // m/s for speed reduction without gear
+          
+          if (verticalSpeed > crashThreshold) {
+            // High vertical speed = crash regardless of gear
             game.crashed = true;
-            console.log('💥 CRASHED! Speed was:', speed.toFixed(1), 'm/s');
-            
-            // Stop the aircraft
+            console.log('💥 CRASHED! Vertical speed too high:', verticalSpeed.toFixed(1), 'm/s');
             aircraft.setLinearVelocity(pl.Vec2(0, 0));
             aircraft.setAngularVelocity(0);
+          } else if (!game.gearDown && verticalSpeed > hardLandingThreshold) {
+            // Hard landing without gear = lose speed but don't crash
+            console.log('⚠️ Hard landing without gear! Losing speed...');
+            const speedReduction = 0.3; // Reduce speed by 70%
+            aircraft.setLinearVelocity(pl.Vec2(
+              vel.x * speedReduction,
+              vel.y * speedReduction
+            ));
+            // Add some bounce/instability
+            aircraft.setAngularVelocity(aircraft.getAngularVelocity() + (Math.random() - 0.5) * 2);
+          } else if (game.gearDown) {
+            // Safe landing with gear down
+            console.log('✅ Safe landing with gear down!');
+            // Gentle speed reduction for realistic landing
+            aircraft.setLinearVelocity(pl.Vec2(
+              vel.x * 0.8,
+              Math.min(vel.y, 0) // Stop downward motion
+            ));
           } else {
-            console.log('🛬 Safe landing at speed:', speed.toFixed(1), 'm/s');
+            // Low speed ground contact without gear (gentle bump)
+            console.log('🟡 Gentle ground contact');
+            aircraft.setLinearVelocity(pl.Vec2(
+              vel.x * 0.9,
+              Math.min(vel.y, 0)
+            ));
           }
         }
       });
