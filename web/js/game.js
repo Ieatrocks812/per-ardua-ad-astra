@@ -12,7 +12,7 @@
   };
 
   // Asset paths (relative to this html file)
-  images.background.src = '../assets/sprites/environment/background.png';
+  images.background.src = '../assets/sprites/environment/map.png';
   images.plane.src = '../assets/sprites/aircraft/player/Spitfire facing right.png';
   images.enemyBf109.src = '../assets/sprites/aircraft/enemies/bf-109 facing left.png';
   images.enemyJu88.src = '../assets/sprites/aircraft/enemies/ju-88.png';
@@ -551,15 +551,22 @@
   // Start when images are loaded
   let assetsLoaded = 0;
   const required = Object.keys(images).length;
-  Object.values(images).forEach((img) => {
+  Object.values(images).forEach((img, index) => {
     img.addEventListener('load', () => {
+      console.log(`Image ${index + 1}/${required} loaded:`, img.src);
       assetsLoaded += 1;
       if (assetsLoaded >= required) {
+        console.log('All assets loaded, starting game...');
         lastTime = performance.now();
         requestAnimationFrame(frame);
       }
     });
+    img.addEventListener('error', (e) => {
+      console.error('Failed to load image:', img.src, e);
+    });
   });
+
+  console.log('Loading assets...', Object.values(images).map(img => img.src));
 })();
 
 
