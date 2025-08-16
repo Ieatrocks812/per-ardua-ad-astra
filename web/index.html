@@ -249,6 +249,12 @@
           game.gearDown = !game.gearDown;
           console.log('🛬 Landing gear:', game.gearDown ? 'DOWN' : 'UP');
           console.log('🎮 Current game state:', { inverted: game.inverted, gearDown: game.gearDown });
+          console.log('🎨 Sprite selection logic:', {
+            'inverted && gearDown': game.inverted && game.gearDown,
+            'inverted && !gearDown': game.inverted && !game.gearDown,
+            '!inverted && gearDown': !game.inverted && game.gearDown,
+            'normal': !game.inverted && !game.gearDown
+          });
         }
       });
       
@@ -514,9 +520,25 @@
         const angle = aircraft.getAngle();
         const screenPos = worldToScreen(pos.x, pos.y);
         
+        // Debug: Log aircraft state periodically
+        if (Math.random() < 0.01) { // 1% chance per frame for occasional logging
+          console.log('✈️ Aircraft state:', {
+            angle: (angle * 180 / Math.PI).toFixed(1) + '°',
+            inverted: game.inverted,
+            gearDown: game.gearDown,
+            position: { x: pos.x.toFixed(1), y: pos.y.toFixed(1) }
+          });
+        }
+        
         ctx.save();
         ctx.translate(screenPos.x, screenPos.y);
-        ctx.rotate(angle);
+        
+        // Fix sprite orientation - the "normal" sprites appear to be upside down
+        if (game.inverted) {
+          ctx.rotate(angle); // Inverted mode uses normal rotation
+        } else {
+          ctx.rotate(angle + Math.PI); // Normal mode needs 180° rotation to appear right-side up
+        }
         
         // Choose sprite based on inverted mode and gear state
         let currentSprite, spriteLoaded;
