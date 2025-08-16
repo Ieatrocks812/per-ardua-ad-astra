@@ -386,10 +386,9 @@
           console.log('🛬 Gear changed:', oldGear ? 'DOWN' : 'UP', '→', game.gearDown ? 'DOWN' : 'UP');
           console.log('🛬 G key - Game state after gear toggle:', { inverted: game.inverted, gearDown: game.gearDown });
         }
-        // Fire guns (space)
+        // Fire guns (space) - now handled in physics update for continuous fire
         if (key === ' ' || e.code === 'Space') {
-          console.log('🎯 SPACE pressed - attempting to fire guns');
-          trySpawnGuns();
+          console.log('🎯 SPACE pressed - continuous fire mode');
         }
       });
       
@@ -567,7 +566,7 @@
           casing.vy += 9.81 * dt; // Gravity
           
           const speed = Math.sqrt(casing.vx * casing.vx + casing.vy * casing.vy);
-          const dragCoeff = 0.05; // More drag for casings
+          const dragCoeff = 0.3; // Much more drag for casings (was 0.05)
           const drag = dragCoeff * speed;
           
           if (speed > 0) {
@@ -709,6 +708,12 @@
         }
         if (rollRight) {
           aircraft.applyTorque(controlTorque * 0.6, true);
+        }
+        
+        // Continuous firing while holding space
+        const firing = game.keys.has(' ');
+        if (firing) {
+          trySpawnGuns();
         }
         
         // Thrust - Further increased for higher top speeds with altitude reduction
@@ -950,8 +955,8 @@
           if (proj.type === 'tracer') {
             // Tracer gets smaller as it slows down
             const speedRatio = speed / proj.initialSpeed;
-            const tracerLength = Math.max(60, 120 * speedRatio * game.camera.zoom); // Slightly bigger
-            const tracerWidth = Math.max(25, 50 * speedRatio * game.camera.zoom); // Slightly bigger
+            const tracerLength = Math.max(120, 240 * speedRatio * game.camera.zoom); // Doubled size
+            const tracerWidth = Math.max(50, 100 * speedRatio * game.camera.zoom); // Doubled size
             
             if (assets.loaded.tracer && assets.tracer) {
               const scale = tracerLength / assets.tracer.naturalWidth;
@@ -966,7 +971,7 @@
             }
           } else {
             // Regular bullet
-            const bulletSize = Math.max(35, 60 * game.camera.zoom); // Slightly bigger
+            const bulletSize = Math.max(70, 120 * game.camera.zoom); // Doubled size
             
             if (assets.loaded.bullet && assets.bullet) {
               const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
@@ -994,7 +999,7 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(casing.rotation);
           
-          const casingSize = Math.max(45, 70 * game.camera.zoom); // Slightly bigger
+          const casingSize = Math.max(90, 140 * game.camera.zoom); // Doubled size
           
           if (assets.loaded.casing && assets.casing) {
             const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
