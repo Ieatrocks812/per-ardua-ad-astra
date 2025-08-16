@@ -141,27 +141,36 @@
       
       // Remove Box2D velocity limits for higher speeds
       // Default is 2.0 units per timestep (120 m/s at 60fps)
+      // With PHYSICS_SCALE = 0.5, we need even higher limits
       console.log('🔧 Attempting to override Box2D velocity limits...');
       
-      if (world.setMaxLinearVelocity) {
-        world.setMaxLinearVelocity(10.0); // Allow up to 600 m/s
-        console.log('✅ Set world max linear velocity to 10.0');
-      }
-      
-      // Alternative method for Planck.js
-      if (pl.Settings) {
+      // Set Planck.js settings BEFORE creating any bodies
+      if (typeof pl.Settings !== 'undefined') {
         console.log('📊 Original Settings:', { 
           maxTranslation: pl.Settings.maxTranslation, 
           maxLinearVelocity: pl.Settings.maxLinearVelocity 
         });
-        pl.Settings.maxTranslation = 10.0; // Increase from default 2.0
-        pl.Settings.maxLinearVelocity = 600.0; // Direct velocity limit
+        // Much higher limits to allow for 400+ m/s speeds
+        pl.Settings.maxTranslation = 20.0; // Increase from default 2.0 to 20.0
+        pl.Settings.maxLinearVelocity = 1000.0; // Allow up to 1000 m/s in physics units
         console.log('✅ Updated Settings:', { 
           maxTranslation: pl.Settings.maxTranslation, 
           maxLinearVelocity: pl.Settings.maxLinearVelocity 
         });
       } else {
-        console.log('⚠️ pl.Settings not available');
+        console.log('⚠️ pl.Settings not available - trying alternative methods');
+      }
+      
+      // Also try setting on world object if available
+      if (world.setMaxLinearVelocity) {
+        world.setMaxLinearVelocity(20.0); // Allow up to 1200 m/s at 60fps
+        console.log('✅ Set world max linear velocity to 20.0');
+      }
+      
+      // Try another approach - modify the world's step settings
+      if (world.m_maxLinearVelocity !== undefined) {
+        world.m_maxLinearVelocity = 20.0;
+        console.log('✅ Set world.m_maxLinearVelocity to 20.0');
       }
       
       // Canvas setup
@@ -206,7 +215,7 @@
         console.log('📍 Current location:', window.location.href);
         console.log('📂 Base directory:', window.location.origin + window.location.pathname.replace('/web/index.html', ''));
         console.log('🛩️ Loading Ju-88 sprite from:', '../assets/sprites/aircraft/enemies/ju-88.png');
-        console.log('🎯 Loading Tracer sprite from:', '../assets/sprites/effects/Tracer round.png');
+        console.log('🎯 Loading Tracer sprite from:', '../assets/sprites/effects/tracer_round.png');
         
         // Define asset paths to try (in order of preference)
         const assetPaths = {
@@ -246,9 +255,9 @@
             '/assets/sprites/effects/bullet.png'
           ],
           tracer: [
-            '../assets/sprites/effects/Tracer round.png',
-            './assets/sprites/effects/Tracer round.png',
-            '/assets/sprites/effects/Tracer round.png'
+            '../assets/sprites/effects/tracer_round.png',
+            './assets/sprites/effects/tracer_round.png',
+            '/assets/sprites/effects/tracer_round.png'
           ],
           casing: [
             '../assets/sprites/effects/casing.png',
@@ -1064,7 +1073,7 @@
         }
         
         // Thrust - Further increased for higher top speeds with altitude reduction
-        let maxThrust = 120000; // Quadrupled from original 30000 for much higher speeds
+        let maxThrust = 200000; // Increased even more to overcome 240 m/s cap
         
         // Altitude-based thrust reduction (same as lift)
         const visualAltitude = -pos.y * VISUAL_SCALE; // Convert to visual altitude
@@ -1114,7 +1123,7 @@
           ), true);
           
           // Drag - Minimized for very high top speeds
-          const dragCoeff = 0.01 + Math.abs(liftCoeff) * 0.01; // Much lower drag for speeds well above 120 m/s
+          const dragCoeff = 0.005 + Math.abs(liftCoeff) * 0.005; // Even lower drag to break 240 m/s barrier
           const dragMag = q * wingArea * dragCoeff;
           aircraft.applyForceToCenter(pl.Vec2(
             -vel.x * dragMag / speed,
