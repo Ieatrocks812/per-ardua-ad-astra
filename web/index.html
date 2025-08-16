@@ -94,65 +94,84 @@
       resizeCanvas();
       
       // =============================================================================
-      // IMAGES
+      // ASSET LOADING
       // =============================================================================
       
       const assets = {
-        map: new Image(),
-        spitfire: new Image(),
+        map: null,
+        spitfire: null,
         loaded: { map: false, spitfire: false }
       };
       
-      assets.map.onload = () => {
-        assets.loaded.map = true;
-        console.log('✓ Map loaded:', assets.map.naturalWidth, 'x', assets.map.naturalHeight);
-      };
-      
-      assets.map.onerror = (e) => {
-        console.error('✗ Map failed to load:', e);
-      };
-      
-      assets.spitfire.onload = () => {
-        assets.loaded.spitfire = true;
-        console.log('✓ Spitfire loaded:', assets.spitfire.naturalWidth, 'x', assets.spitfire.naturalHeight);
-      };
-      
-      assets.spitfire.onerror = (e) => {
-        console.error('✗ Spitfire failed to load:', e);
-      };
-      
-      // Load images - try both relative paths
-      const mapPath = '../assets/sprites/environment/map.png';
-      const spitfirePath = '../assets/sprites/aircraft/player/Spitfire facing right.png';
-      
-      console.log('Attempting to load:', mapPath);
-      console.log('Attempting to load:', spitfirePath);
-      
-      assets.map.src = mapPath;
-      assets.spitfire.src = spitfirePath;
-      
-      // Test if images can be reached by trying to fetch them
-      fetch(mapPath)
-        .then(response => console.log('Map fetch result:', response.status, response.statusText))
-        .catch(err => {
-          console.error('Map fetch failed:', err);
-          // Try alternative path
-          console.log('Trying alternative path...');
-          assets.map.src = './assets/sprites/environment/map.png';
-        });
+      async function loadAssets() {
+        console.log('🎮 Starting asset loading...');
         
-      fetch(spitfirePath)
-        .then(response => console.log('Spitfire fetch result:', response.status, response.statusText))
-        .catch(err => {
-          console.error('Spitfire fetch failed:', err);
-          // Try alternative path
-          console.log('Trying alternative spitfire path...');
-          assets.spitfire.src = './assets/sprites/aircraft/player/Spitfire facing right.png';
-        });
+        // Define asset paths to try (in order of preference)
+        const assetPaths = {
+          map: [
+            '../assets/sprites/environment/map.png',
+            './assets/sprites/environment/map.png',
+            '/assets/sprites/environment/map.png'
+          ],
+          spitfire: [
+            '../assets/sprites/aircraft/player/Spitfire facing right.png',
+            './assets/sprites/aircraft/player/Spitfire facing right.png',
+            '/assets/sprites/aircraft/player/Spitfire facing right.png'
+          ]
+        };
+        
+        // Function to load a single image with multiple path attempts
+        function loadImage(name, paths) {
+          return new Promise((resolve, reject) => {
+            let attemptIndex = 0;
+            
+            function tryNextPath() {
+              if (attemptIndex >= paths.length) {
+                reject(new Error(`Failed to load ${name} from any path`));
+                return;
+              }
+              
+              const img = new Image();
+              const currentPath = paths[attemptIndex];
+              
+              console.log(`📷 Trying ${name} from: ${currentPath}`);
+              
+              img.onload = () => {
+                console.log(`✅ ${name} loaded successfully from: ${currentPath}`);
+                console.log(`   Size: ${img.naturalWidth}x${img.naturalHeight}px`);
+                assets[name] = img;
+                assets.loaded[name] = true;
+                resolve(img);
+              };
+              
+              img.onerror = () => {
+                console.log(`❌ ${name} failed from: ${currentPath}`);
+                attemptIndex++;
+                tryNextPath();
+              };
+              
+              img.src = currentPath;
+            }
+            
+            tryNextPath();
+          });
+        }
+        
+        // Load both assets
+        try {
+          await Promise.all([
+            loadImage('map', assetPaths.map),
+            loadImage('spitfire', assetPaths.spitfire)
+          ]);
+          console.log('🎉 All assets loaded successfully!');
+        } catch (error) {
+          console.warn('⚠️ Some assets failed to load:', error.message);
+          console.log('🎮 Game will continue with fallback graphics');
+        }
+      }
       
-      console.log('Loading assets...');
-      console.log('Current page URL:', window.location.href);
-      console.log('Base URL:', window.location.origin + window.location.pathname);
+      // Start loading assets
+      loadAssets();
       
       // =============================================================================
       // GAME STATE
@@ -313,7 +332,7 @@
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
         
         // Background
-        if (assets.loaded.map) {
+        if (assets.loaded.map && assets.map) {
           const mapW = WORLD_WIDTH * SCALE * game.camera.zoom;
           const mapH = WORLD_HEIGHT * SCALE * game.camera.zoom;
           const mapPos = worldToScreen(-WORLD_WIDTH/2, -WORLD_HEIGHT/2);
@@ -325,6 +344,13 @@
           gradient.addColorStop(1, '#98FB98');
           ctx.fillStyle = gradient;
           ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+          
+          // Loading indicator
+          if (!assets.loaded.map) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Loading map.png...', 50, 50);
+          }
         }
         
         // Aircraft
@@ -336,7 +362,7 @@
         ctx.translate(screenPos.x, screenPos.y);
         ctx.rotate(angle);
         
-        if (assets.loaded.spitfire) {
+        if (assets.loaded.spitfire && assets.spitfire) {
           const scale = 0.4 * game.camera.zoom;
           const w = assets.spitfire.naturalWidth * scale;
           const h = assets.spitfire.naturalHeight * scale;
