@@ -22,8 +22,20 @@
     background: new Image(),
     spitfire: new Image()
   };
-  images.background.src = '../assets/sprites/environment/map.png';
-  images.spitfire.src = '../assets/sprites/aircraft/player/Spitfire facing right.png';
+  
+  // Set up image loading with error handling
+  images.background.onload = () => console.log('Background loaded successfully');
+  images.background.onerror = (e) => console.error('Failed to load background:', e);
+  images.spitfire.onload = () => console.log('Spitfire loaded successfully'); 
+  images.spitfire.onerror = (e) => console.error('Failed to load spitfire:', e);
+  
+  images.background.src = './assets/sprites/environment/map.png';
+  images.spitfire.src = './assets/sprites/aircraft/player/Spitfire facing right.png';
+  
+  console.log('Loading images:', {
+    background: images.background.src,
+    spitfire: images.spitfire.src
+  });
   
   // Canvas setup
   let canvasWidth = 0;
@@ -225,21 +237,36 @@
   }
   
   function drawBackground() {
-    if (images.background.complete && images.background.naturalWidth > 0) {
+    const bgImg = images.background;
+    console.log('Drawing background:', {
+      complete: bgImg.complete,
+      naturalWidth: bgImg.naturalWidth,
+      naturalHeight: bgImg.naturalHeight,
+      src: bgImg.src
+    });
+    
+    if (bgImg.complete && bgImg.naturalWidth > 0) {
       const mapWidth = WORLD_WIDTH;
       const mapHeight = WORLD_HEIGHT;
       const screenPos = worldToScreen(-mapWidth / 2, -mapHeight / 2);
       const screenWidth = mapWidth * PHYSICS_SCALE * gameState.camera.zoom;
       const screenHeight = mapHeight * PHYSICS_SCALE * gameState.camera.zoom;
       
-      ctx.drawImage(images.background, screenPos.x, screenPos.y, screenWidth, screenHeight);
+      console.log('Drawing map at:', screenPos, 'size:', screenWidth, 'x', screenHeight);
+      ctx.drawImage(bgImg, screenPos.x, screenPos.y, screenWidth, screenHeight);
     } else {
-      // Fallback gradient
+      // Fallback gradient with visible indication
+      console.log('Using fallback background - map not loaded');
       const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
       gradient.addColorStop(0, '#87CEEB');
       gradient.addColorStop(1, '#90EE90');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      
+      // Add text to show it's fallback
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.font = '20px system-ui';
+      ctx.fillText('Loading map.png...', 50, 50);
     }
   }
   
