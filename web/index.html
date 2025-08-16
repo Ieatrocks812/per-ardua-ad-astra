@@ -463,37 +463,26 @@
         // Calculate speed once for use in both controls and aerodynamics
         const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
         
-        // Flight controls - Aerodynamic control surfaces (more realistic than pure torque)
+        // Flight controls - Hybrid approach (force + torque for reliability)
         const controlEffectiveness = Math.min(speed * 0.1, 1.0); // Controls more effective at higher speeds
-        const controlForce = 15000 * controlEffectiveness; // Reduced from pure torque approach
+        const controlTorque = 20000 * controlEffectiveness; // Moderate torque for reliable control
         
-        // Apply control forces at aircraft extremities (like real control surfaces)
-        const noseOffset = 2.0; // Distance from center to nose/tail (scaled)
-        const wingOffset = 1.5; // Distance from center to wingtips (scaled)
+        // Debug control inputs
+        if (Math.random() < 0.02) { // Occasional debug logging
+          console.log('🎮 Controls:', { pitchUp, pitchDown, rollLeft, rollRight, effectiveness: controlEffectiveness.toFixed(2) });
+        }
         
         if (pitchUp) {
-          // Apply upward force at tail (nose goes up)
-          const tailPos = aircraft.getWorldPoint(pl.Vec2(-noseOffset, 0));
-          aircraft.applyForce(pl.Vec2(0, -controlForce), tailPos, true);
+          aircraft.applyTorque(-controlTorque, true);
         }
         if (pitchDown) {
-          // Apply downward force at tail (nose goes down)
-          const tailPos = aircraft.getWorldPoint(pl.Vec2(-noseOffset, 0));
-          aircraft.applyForce(pl.Vec2(0, controlForce), tailPos, true);
+          aircraft.applyTorque(controlTorque, true);
         }
         if (rollLeft) {
-          // Apply upward force at right wing, downward at left wing
-          const rightWing = aircraft.getWorldPoint(pl.Vec2(0, wingOffset));
-          const leftWing = aircraft.getWorldPoint(pl.Vec2(0, -wingOffset));
-          aircraft.applyForce(pl.Vec2(0, -controlForce * 0.5), rightWing, true);
-          aircraft.applyForce(pl.Vec2(0, controlForce * 0.5), leftWing, true);
+          aircraft.applyTorque(-controlTorque * 0.6, true);
         }
         if (rollRight) {
-          // Apply downward force at right wing, upward at left wing
-          const rightWing = aircraft.getWorldPoint(pl.Vec2(0, wingOffset));
-          const leftWing = aircraft.getWorldPoint(pl.Vec2(0, -wingOffset));
-          aircraft.applyForce(pl.Vec2(0, controlForce * 0.5), rightWing, true);
-          aircraft.applyForce(pl.Vec2(0, -controlForce * 0.5), leftWing, true);
+          aircraft.applyTorque(controlTorque * 0.6, true);
         }
         
         // Thrust - Further increased for higher top speeds with altitude reduction
