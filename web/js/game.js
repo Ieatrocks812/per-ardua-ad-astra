@@ -53,7 +53,7 @@
     x: 0, 
     y: 0, 
     zoom: 1.0, // zoom factor (1.0 = normal, 2.0 = 2x zoomed in, 0.5 = 2x zoomed out)
-    minZoom: 0.1,
+    minZoom: minZoomBasedOnMap,
     maxZoom: 5.0
   };
 
@@ -127,6 +127,7 @@
   // Camera settings
   const backgroundParallax = 0.6; // background scroll factor
   const backgroundTileHeight = 300; // meters
+  const minZoomBasedOnMap = 0.3; // prevent zooming out too far from map
 
   function wrapPi(angle) {
     while (angle > Math.PI) angle -= 2 * Math.PI;
@@ -391,28 +392,23 @@
   function drawBackground() {
     const img = images.background;
     if (img.complete && img.naturalWidth > 0) {
-      // Scale background to a fixed world height for tiling
-      const scale = (backgroundTileHeight * metersToPixels * camera.zoom) / img.naturalHeight;
-      const tileWidthPx = img.naturalWidth * scale;
-      const tileHeightPx = img.naturalHeight * scale;
-
-      // Parallax factor (background scrolls slower)
-      const camXpx = camera.x * metersToPixels * camera.zoom * backgroundParallax;
-      const camYpx = camera.y * metersToPixels * camera.zoom * backgroundParallax;
-
-      const startX = canvasWidth / 2 - ((camXpx % tileWidthPx) + tileWidthPx) % tileWidthPx;
-      const startY = canvasHeight / 2 - ((camYpx % tileHeightPx) + tileHeightPx) % tileHeightPx;
-
-      const cols = Math.ceil((canvasWidth + tileWidthPx) / tileWidthPx) + 2;
-      const rows = Math.ceil((canvasHeight + tileHeightPx) / tileHeightPx) + 2;
-
-      for (let row = -1; row < rows; row++) {
-        for (let col = -1; col < cols; col++) {
-          const x = startX + col * tileWidthPx;
-          const y = startY + row * tileHeightPx;
-          context.drawImage(img, x, y, tileWidthPx, tileHeightPx);
-        }
-      }
+      // For a single large map image, scale it to fit the world and position it
+      // Calculate scale to fit the map appropriately
+      const mapWorldWidth = 8000; // assume map covers 8km of world space
+      const mapWorldHeight = 6000; // assume map covers 6km of world space
+      
+      const mapPixelWidth = mapWorldWidth * metersToPixels * camera.zoom;
+      const mapPixelHeight = mapWorldHeight * metersToPixels * camera.zoom;
+      
+      // Center the map in world coordinates (map spans from -4000 to +4000 in X, 0 to 6000 in Y)
+      const mapCenterX = 0;
+      const mapCenterY = mapWorldHeight / 2;
+      
+      // Convert map position to screen coordinates
+      const mapScreenX = (mapCenterX - camera.x) * metersToPixels * camera.zoom + canvasWidth / 2 - mapPixelWidth / 2;
+      const mapScreenY = (mapCenterY - camera.y) * metersToPixels * camera.zoom + canvasHeight / 2 - mapPixelHeight / 2;
+      
+      context.drawImage(img, mapScreenX, mapScreenY, mapPixelWidth, mapPixelHeight);
     } else {
       // Fallback: simple gradient background
       const gradient = context.createLinearGradient(0, 0, 0, canvasHeight);
@@ -487,37 +483,8 @@
   }
 
   function drawEnemies() {
-    for (const enemy of enemies) {
-      const pos = worldToScreen(enemy.body.getPosition().x, enemy.body.getPosition().y);
-      const img = enemy.type === 'ju88' ? images.enemyJu88 : images.enemyBf109;
-      
-      context.save();
-      context.translate(pos.x, pos.y);
-      context.rotate(enemy.body.getAngle());
-      
-      if (img.complete && img.naturalWidth > 0) {
-        const baseScale = (enemy.type === 'ju88' ? 0.8 : 0.6) * camera.zoom;
-        const width = img.naturalWidth * baseScale;
-        const height = img.naturalHeight * baseScale;
-        context.drawImage(img, -width * 0.5, -height * 0.5, width, height);
-        
-        // Health indicator
-        if (enemy.health < (enemy.type === 'ju88' ? 3 : 2)) {
-          context.fillStyle = 'red';
-          context.fillRect(-width * 0.3, -height * 0.8, (width * 0.6) * (enemy.health / (enemy.type === 'ju88' ? 3 : 2)), 3);
-        }
-      } else {
-        // Fallback: draw simple rectangle
-        context.fillStyle = enemy.type === 'ju88' ? '#8B0000' : '#DC143C'; // dark red for enemies
-        context.strokeStyle = '#000000';
-        context.lineWidth = 1;
-        const size = (enemy.type === 'ju88' ? 25 : 18) * camera.zoom;
-        context.fillRect(-size * 0.6, -size * 0.3, size * 1.2, size * 0.6);
-        context.strokeRect(-size * 0.6, -size * 0.3, size * 1.2, size * 0.6);
-      }
-      
-      context.restore();
-    }
+    // Don't draw enemies for now - focus on just background and player
+    return;
   }
 
   function drawHud() {
@@ -553,7 +520,7 @@
 
     // Update input/forces once per render
     updateControlsAndForces(fixedDt);
-    updateEnemies(fixedDt);
+    // updateEnemies(fixedDt); // Disabled for now
 
     while (accumulator >= fixedDt) {
       world.step(fixedDt);
