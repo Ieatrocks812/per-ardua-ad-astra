@@ -341,7 +341,7 @@
       // =============================================================================
       
       const game = {
-        camera: { x: 0, y: 0, zoom: 0.8, minZoom: 0.2, maxZoom: 9.0 }, // 3x greater max zoom
+        camera: { x: 0, y: 0, zoom: 0.8, minZoom: 0.05, maxZoom: 9.0 }, // Much further zoom out (0.05 instead of 0.2)
         throttle: 0.4,
         keys: new Set(),
         showCollision: false,
@@ -490,7 +490,7 @@
         };
         
         // Muzzle velocity (relative to aircraft)
-        const muzzleVelocity = 150; // m/s in physics units
+        const muzzleVelocity = 400; // m/s in physics units (increased from 150)
         const bulletVel = {
           x: vel.x + Math.cos(angle) * muzzleVelocity,
           y: vel.y + Math.sin(angle) * muzzleVelocity
