@@ -460,8 +460,10 @@
         if (zoomIn) game.camera.zoom = Math.min(game.camera.maxZoom, game.camera.zoom + dt * 1.2);
         if (zoomOut) game.camera.zoom = Math.max(game.camera.minZoom, game.camera.zoom - dt * 1.2);
         
-        // Flight controls - Aerodynamic control surfaces (more realistic than pure torque)
+        // Calculate speed once for use in both controls and aerodynamics
         const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+        
+        // Flight controls - Aerodynamic control surfaces (more realistic than pure torque)
         const controlEffectiveness = Math.min(speed * 0.1, 1.0); // Controls more effective at higher speeds
         const controlForce = 15000 * controlEffectiveness; // Reduced from pure torque approach
         
@@ -515,7 +517,6 @@
         aircraft.applyForceToCenter(pl.Vec2(thrustX, thrustY), true);
         
         // Simple aerodynamics
-        const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
         if (speed > 1) {
           const airDensity = 1.225;
           const wingArea = 20;
