@@ -220,10 +220,10 @@
       // PHYSICS
       // =============================================================================
       
-      // Create aircraft - spawn in center of map
+      // Create aircraft - spawn in center of map above ground
       const aircraft = world.createBody({
         type: 'dynamic',
-        position: pl.Vec2(0, 200), // Center of map, above ground
+        position: pl.Vec2(0, 400), // Center horizontally, safe altitude above ground
         angle: 0,
         linearDamping: 0.1,
         angularDamping: 0.9
@@ -315,7 +315,7 @@
         
         // Reset
         if (reset) {
-          aircraft.setTransform(pl.Vec2(0, 200), 0); // Reset to center of map
+          aircraft.setTransform(pl.Vec2(0, 400), 0); // Reset to safe altitude above ground
           aircraft.setLinearVelocity(pl.Vec2(0, 0));
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
@@ -397,7 +397,9 @@
         if (assets.loaded.map && assets.map) {
           const mapW = WORLD_WIDTH * SCALE * game.camera.zoom;
           const mapH = WORLD_HEIGHT * SCALE * game.camera.zoom;
-          const mapPos = worldToScreen(-WORLD_WIDTH/2, -WORLD_HEIGHT/2);
+          // Position map so bottom aligns with ground level (y=1200)
+          const groundLevel = 1200;
+          const mapPos = worldToScreen(-WORLD_WIDTH/2, groundLevel - WORLD_HEIGHT);
           ctx.drawImage(assets.map, mapPos.x, mapPos.y, mapW, mapH);
         } else {
           // Fallback sky
