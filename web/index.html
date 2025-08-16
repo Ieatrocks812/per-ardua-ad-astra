@@ -99,8 +99,9 @@
       
       const assets = {
         map: null,
+        tileableMap: null,
         spitfire: null,
-        loaded: { map: false, spitfire: false }
+        loaded: { map: false, tileableMap: false, spitfire: false }
       };
       
       async function loadAssets() {
@@ -114,6 +115,11 @@
             '../assets/sprites/environment/map.png',
             './assets/sprites/environment/map.png',
             '/assets/sprites/environment/map.png'
+          ],
+          tileableMap: [
+            '../assets/sprites/environment/tileable map.png',
+            './assets/sprites/environment/tileable map.png',
+            '/assets/sprites/environment/tileable map.png'
           ],
           spitfire: [
             '../assets/sprites/aircraft/player/Spitfire facing right.png',
@@ -160,10 +166,11 @@
           });
         }
         
-        // Load both assets
+        // Load all assets
         try {
           await Promise.all([
             loadImage('map', assetPaths.map),
+            loadImage('tileableMap', assetPaths.tileableMap),
             loadImage('spitfire', assetPaths.spitfire)
           ]);
           console.log('🎉 All assets loaded successfully!');
@@ -220,10 +227,10 @@
       // PHYSICS
       // =============================================================================
       
-      // Create aircraft - spawn in center of map above ground
+      // Create aircraft - spawn in center of main map above ground
       const aircraft = world.createBody({
         type: 'dynamic',
-        position: pl.Vec2(0, 400), // Center horizontally, safe altitude above ground
+        position: pl.Vec2(0, 600), // Center of main map, safe altitude above ground
         angle: 0,
         linearDamping: 0.1,
         angularDamping: 0.9
@@ -240,9 +247,10 @@
       const groundBodies = [];
       
       function createGroundCollision() {
-        // Create a simple ground collision area that covers the bottom half of the map
+        // Create infinite ground collision - large enough to cover any reasonable flight distance
         const groundLevel = 1200; // Y position where ground starts
         const groundThickness = 600; // How thick the ground collision is
+        const infiniteWidth = 100000; // Very wide ground - 100km in each direction
         
         const groundBody = world.createBody({
           type: 'static',
@@ -250,7 +258,7 @@
         });
         
         groundBody.createFixture({
-          shape: pl.Box(WORLD_WIDTH / 2, groundThickness / 2),
+          shape: pl.Box(infiniteWidth / 2, groundThickness / 2),
           friction: 1.0,
           restitution: 0.0 // No bounce - aircraft stops when hitting ground
         });
@@ -259,12 +267,12 @@
           body: groundBody,
           x: 0,
           y: groundLevel + groundThickness / 2,
-          width: WORLD_WIDTH,
+          width: infiniteWidth,
           height: groundThickness,
           isMainGround: true
         });
         
-        console.log(`🟢 Created ground collision at y=${groundLevel}`);
+        console.log(`🟢 Created infinite ground collision at y=${groundLevel}`);
       }
       
       createGroundCollision();
@@ -315,7 +323,7 @@
         
         // Reset
         if (reset) {
-          aircraft.setTransform(pl.Vec2(0, 400), 0); // Reset to safe altitude above ground
+          aircraft.setTransform(pl.Vec2(0, 600), 0); // Reset to center of main map, safe altitude
           aircraft.setLinearVelocity(pl.Vec2(0, 0));
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
@@ -393,14 +401,42 @@
         // Clear
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
         
-        // Background
-        if (assets.loaded.map && assets.map) {
-          const mapW = WORLD_WIDTH * SCALE * game.camera.zoom;
-          const mapH = WORLD_HEIGHT * SCALE * game.camera.zoom;
-          // Position map so bottom aligns with ground level (y=1200)
-          const groundLevel = 1200;
-          const mapPos = worldToScreen(-WORLD_WIDTH/2, groundLevel - WORLD_HEIGHT);
-          ctx.drawImage(assets.map, mapPos.x, mapPos.y, mapW, mapH);
+        // Background - main map in center, tileable on sides
+        const groundLevel = 1200;
+        const mapHeight = WORLD_HEIGHT;
+        
+        if (assets.loaded.map && assets.map && assets.loaded.tileableMap && assets.tileableMap) {
+          // Calculate main map dimensions and position
+          const mainMapWidth = WORLD_WIDTH; // 4000m wide
+          const mainMapPixelWidth = mainMapWidth * SCALE * game.camera.zoom;
+          const mainMapPixelHeight = mapHeight * SCALE * game.camera.zoom;
+          const mainMapPos = worldToScreen(-mainMapWidth/2, groundLevel - mapHeight);
+          
+          // Draw main map in center
+          ctx.drawImage(assets.map, mainMapPos.x, mainMapPos.y, mainMapPixelWidth, mainMapPixelHeight);
+          
+          // Calculate tileable map dimensions
+          const tileableMapNaturalRatio = assets.tileableMap.naturalWidth / assets.tileableMap.naturalHeight;
+          const tileableMapPixelHeight = mainMapPixelHeight; // Same height as main map
+          const tileableMapPixelWidth = tileableMapPixelHeight * tileableMapNaturalRatio;
+          const tileableMapWorldWidth = tileableMapPixelWidth / (SCALE * game.camera.zoom);
+          
+          // Draw tileable maps on the left side
+          const leftStartX = -mainMapWidth/2;
+          const visibleLeftStart = Math.floor((game.camera.x - canvasWidth/(2*SCALE*game.camera.zoom) - leftStartX) / tileableMapWorldWidth) * tileableMapWorldWidth + leftStartX;
+          for (let x = visibleLeftStart; x > game.camera.x - canvasWidth/(SCALE*game.camera.zoom); x -= tileableMapWorldWidth) {
+            const tilePos = worldToScreen(x - tileableMapWorldWidth, groundLevel - mapHeight);
+            ctx.drawImage(assets.tileableMap, tilePos.x, tilePos.y, tileableMapPixelWidth, tileableMapPixelHeight);
+          }
+          
+          // Draw tileable maps on the right side
+          const rightStartX = mainMapWidth/2;
+          const visibleRightStart = Math.floor((game.camera.x - canvasWidth/(2*SCALE*game.camera.zoom) - rightStartX) / tileableMapWorldWidth) * tileableMapWorldWidth + rightStartX;
+          for (let x = visibleRightStart; x < game.camera.x + canvasWidth/(SCALE*game.camera.zoom); x += tileableMapWorldWidth) {
+            const tilePos = worldToScreen(x, groundLevel - mapHeight);
+            ctx.drawImage(assets.tileableMap, tilePos.x, tilePos.y, tileableMapPixelWidth, tileableMapPixelHeight);
+          }
+          
         } else {
           // Fallback sky
           const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
@@ -410,10 +446,10 @@
           ctx.fillRect(0, 0, canvasWidth, canvasHeight);
           
           // Loading indicator
-          if (!assets.loaded.map) {
+          if (!assets.loaded.map || !assets.loaded.tileableMap) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.font = '20px sans-serif';
-            ctx.fillText('Loading map.png...', 50, 50);
+            ctx.fillText('Loading maps...', 50, 50);
           }
         }
         
