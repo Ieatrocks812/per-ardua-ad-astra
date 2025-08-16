@@ -49,7 +49,7 @@
   
   const gameState = {
     throttle: 0.3,
-    camera: { x: 0, y: 0, zoom: 1.0 },
+    camera: { x: 0, y: 0, zoom: 1.0, minZoom: 0.2, maxZoom: 3.0 },
     keys: new Set()
   };
   
@@ -59,13 +59,22 @@
   
   window.addEventListener('keydown', (e) => {
     gameState.keys.add(e.key.toLowerCase());
-    if (['w', 's', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
+    if (['w', 's', 'a', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
       e.preventDefault();
     }
   });
   
   window.addEventListener('keyup', (e) => {
     gameState.keys.delete(e.key.toLowerCase());
+  });
+
+  // Zoom controls with mouse wheel
+  window.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomSpeed = 0.1;
+    const zoomDelta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+    gameState.camera.zoom = Math.max(gameState.camera.minZoom, 
+      Math.min(gameState.camera.maxZoom, gameState.camera.zoom + zoomDelta));
   });
   
   // =============================================================================
@@ -136,12 +145,14 @@
     const angle = aircraftBody.getAngle();
     
     // Input handling
-    const pitchUp = gameState.keys.has('arrowup');
-    const pitchDown = gameState.keys.has('arrowdown');
+    const pitchUp = gameState.keys.has('a');
+    const pitchDown = gameState.keys.has('d');
     const rollLeft = gameState.keys.has('arrowleft');
     const rollRight = gameState.keys.has('arrowright');
     const throttleUp = gameState.keys.has('w');
     const throttleDown = gameState.keys.has('s');
+    const zoomIn = gameState.keys.has('e');
+    const zoomOut = gameState.keys.has('q');
     const reset = gameState.keys.has('r');
     
     // Reset
@@ -156,6 +167,10 @@
     // Throttle control
     if (throttleUp) gameState.throttle = Math.min(1.0, gameState.throttle + dt * 0.5);
     if (throttleDown) gameState.throttle = Math.max(0.0, gameState.throttle - dt * 0.8);
+    
+    // Zoom control
+    if (zoomIn) gameState.camera.zoom = Math.min(gameState.camera.maxZoom, gameState.camera.zoom + dt * 1.0);
+    if (zoomOut) gameState.camera.zoom = Math.max(gameState.camera.minZoom, gameState.camera.zoom - dt * 1.0);
     
     // Flight controls
     const controlForce = 8000;
@@ -278,6 +293,7 @@
     document.getElementById('speed').textContent = Math.round(speed);
     document.getElementById('throttle').textContent = Math.round(gameState.throttle * 100);
     document.getElementById('altitude').textContent = Math.round(Math.max(0, 700 - pos.y));
+    document.getElementById('zoom').textContent = gameState.camera.zoom.toFixed(1);
   }
   
   function updateCamera() {
