@@ -218,7 +218,7 @@
       // =============================================================================
       
       const game = {
-        camera: { x: 0, y: 0, zoom: 0.8, minZoom: 0.2, maxZoom: 3.0 },
+        camera: { x: 0, y: 0, zoom: 0.8, minZoom: 0.2, maxZoom: 9.0 }, // 3x greater max zoom
         throttle: 0.4,
         keys: new Set(),
         showCollision: false,
@@ -287,7 +287,7 @@
         position: pl.Vec2(0, -600), // 600 m above ground level (y=0)
         angle: 0,
         linearDamping: 0.1,
-        angularDamping: 0.5 // Reduced from 0.9 for less rotation resistance
+        angularDamping: 2.5 // High damping for instant pitch stop when controls released
       });
       
       aircraft.createFixture({
@@ -427,15 +427,15 @@
         if (zoomIn) game.camera.zoom = Math.min(game.camera.maxZoom, game.camera.zoom + dt * 1.2);
         if (zoomOut) game.camera.zoom = Math.max(game.camera.minZoom, game.camera.zoom - dt * 1.2);
         
-        // Flight controls - Increased torque for faster turning
-        const torque = 25000; // Increased from 12000 for much faster turning
+        // Flight controls - High torque to overcome high angular damping for instant response
+        const torque = 60000; // Much higher torque to overcome increased damping
         if (pitchUp) aircraft.applyTorque(-torque, true);
         if (pitchDown) aircraft.applyTorque(torque, true);
-        if (rollLeft) aircraft.applyTorque(-torque * 0.7, true); // Increased from 0.5
+        if (rollLeft) aircraft.applyTorque(-torque * 0.7, true);
         if (rollRight) aircraft.applyTorque(torque * 0.7, true);
         
-        // Thrust
-        const maxThrust = 30000;
+        // Thrust - Increased engine power
+        const maxThrust = 60000; // Doubled from 30000 for more power
         const thrust = game.throttle * maxThrust;
         const thrustX = Math.cos(angle) * thrust;
         const thrustY = Math.sin(angle) * thrust;
@@ -459,8 +459,8 @@
             Math.sin(liftAngle) * liftMag
           ), true);
           
-          // Drag - Reduced for better flight performance
-          const dragCoeff = 0.04 + Math.abs(liftCoeff) * 0.05; // Halved from 0.08 and 0.1
+          // Drag - Further reduced for higher top speeds
+          const dragCoeff = 0.02 + Math.abs(liftCoeff) * 0.025; // Quarter of original for much higher speeds
           const dragMag = q * wingArea * dragCoeff;
           aircraft.applyForceToCenter(pl.Vec2(
             -vel.x * dragMag / speed,
