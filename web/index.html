@@ -51,7 +51,7 @@
   </div>
   
   <div class="controls">
-    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • F: Flip • G: Gear • C: Debug • R: Reset
+    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • F: Flip • G: Gear • Space: Fire • C: Debug • R: Reset
   </div>
 
   <!-- Start Screen -->
@@ -95,6 +95,7 @@
     </button>
     <div style="margin-top: 2rem; text-align: center; opacity: 0.7; font-size: 0.9rem;">
       <p>🎮 Use W/S for throttle, A/D for pitch, arrows for roll</p>
+      <p>🔫 Press SPACE to fire wing guns with tracers and casings</p>
       <p>✈️ Realistic flight physics with altitude effects above 5000m</p>
     </div>
   </div>
@@ -192,7 +193,10 @@
         spitfireInverted: null,
         spitfireGear: null,
         spitfireInvertedGear: null,
-        loaded: { map: false, tileableMap: false, spitfire: false, spitfireInverted: false, spitfireGear: false, spitfireInvertedGear: false }
+        bullet: null,
+        tracer: null,
+        casing: null,
+        loaded: { map: false, tileableMap: false, spitfire: false, spitfireInverted: false, spitfireGear: false, spitfireInvertedGear: false, bullet: false, tracer: false, casing: false }
       };
       
       async function loadAssets() {
@@ -231,6 +235,21 @@
             '../assets/sprites/aircraft/player/spitfire upside down with gear.png',
             './assets/sprites/aircraft/player/spitfire upside down with gear.png',
             '/assets/sprites/aircraft/player/spitfire upside down with gear.png'
+          ],
+          bullet: [
+            '../assets/sprites/effects/bullet.png',
+            './assets/sprites/effects/bullet.png',
+            '/assets/sprites/effects/bullet.png'
+          ],
+          tracer: [
+            '../assets/sprites/effects/tracer_round.png',
+            './assets/sprites/effects/tracer_round.png',
+            '/assets/sprites/effects/tracer_round.png'
+          ],
+          casing: [
+            '../assets/sprites/effects/casing.png',
+            './assets/sprites/effects/casing.png',
+            '/assets/sprites/effects/casing.png'
           ]
         };
         
@@ -280,7 +299,10 @@
             loadImage('spitfire', assetPaths.spitfire),
             loadImage('spitfireInverted', assetPaths.spitfireInverted),
             loadImage('spitfireGear', assetPaths.spitfireGear),
-            loadImage('spitfireInvertedGear', assetPaths.spitfireInvertedGear)
+            loadImage('spitfireInvertedGear', assetPaths.spitfireInvertedGear),
+            loadImage('bullet', assetPaths.bullet),
+            loadImage('tracer', assetPaths.tracer),
+            loadImage('casing', assetPaths.casing)
           ]);
           console.log('🎉 All assets loaded successfully!');
           console.log('📊 Final asset load status:', assets.loaded);
@@ -289,6 +311,11 @@
           console.log('🛬 Gear sprite status:', {
             spitfireGear: { loaded: assets.loaded.spitfireGear, hasImage: !!assets.spitfireGear },
             spitfireInvertedGear: { loaded: assets.loaded.spitfireInvertedGear, hasImage: !!assets.spitfireInvertedGear }
+          });
+          console.log('🔫 Ordnance asset status:', {
+            bullet: { loaded: assets.loaded.bullet, hasImage: !!assets.bullet },
+            tracer: { loaded: assets.loaded.tracer, hasImage: !!assets.tracer },
+            casing: { loaded: assets.loaded.casing, hasImage: !!assets.casing }
           });
         } catch (error) {
           console.warn('⚠️ Some assets failed to load:', error.message);
@@ -320,7 +347,9 @@
         showCollision: false,
         crashed: false,
         inverted: false,
-        gearDown: false
+        gearDown: false,
+        projectiles: [], // bullets and tracers
+        casings: [] // ejected shells
       };
       
       // =============================================================================
@@ -332,7 +361,7 @@
         game.keys.add(key);
         console.log('🎯 Key pressed:', key); // Debug key presses
         
-        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c','f','g'].includes(key)) {
+        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c','f','g',' '].includes(key)) {
           e.preventDefault();
         }
         
@@ -356,6 +385,10 @@
           game.gearDown = !game.gearDown;
           console.log('🛬 Gear changed:', oldGear ? 'DOWN' : 'UP', '→', game.gearDown ? 'DOWN' : 'UP');
           console.log('🛬 G key - Game state after gear toggle:', { inverted: game.inverted, gearDown: game.gearDown });
+        }
+        // Fire guns (space)
+        if (key === ' ') {
+          trySpawnGuns();
         }
       });
       
@@ -423,6 +456,147 @@
       }
       
       createGroundCollision();
+      
+      // =============================================================================
+      // GUNS AND PROJECTILES
+      // =============================================================================
+      
+      let lastFireTime = 0;
+      const fireRate = 600; // rounds per minute
+      const fireInterval = 60000 / fireRate; // ms between shots
+      
+      function trySpawnGuns() {
+        const now = performance.now();
+        if (now - lastFireTime < fireInterval) return;
+        lastFireTime = now;
+        
+        const pos = aircraft.getPosition();
+        const angle = aircraft.getAngle();
+        const vel = aircraft.getLinearVelocity();
+        
+        // Wing gun positions (front of wings)
+        const wingSpread = 3.0; // Distance from center to wing guns (scaled physics)
+        const wingForward = 1.5; // Forward from center to gun muzzles
+        
+        // Calculate gun positions
+        const leftGunPos = {
+          x: pos.x + Math.cos(angle) * wingForward - Math.sin(angle) * wingSpread,
+          y: pos.y + Math.sin(angle) * wingForward + Math.cos(angle) * wingSpread
+        };
+        const rightGunPos = {
+          x: pos.x + Math.cos(angle) * wingForward + Math.sin(angle) * wingSpread,
+          y: pos.y + Math.sin(angle) * wingForward - Math.cos(angle) * wingSpread
+        };
+        
+        // Muzzle velocity (relative to aircraft)
+        const muzzleVelocity = 150; // m/s in physics units
+        const bulletVel = {
+          x: vel.x + Math.cos(angle) * muzzleVelocity,
+          y: vel.y + Math.sin(angle) * muzzleVelocity
+        };
+        
+        // Spawn bullets and tracers (every 5th round is a tracer)
+        const isTracer = game.projectiles.length % 5 === 0;
+        
+        // Left gun
+        game.projectiles.push({
+          x: leftGunPos.x,
+          y: leftGunPos.y,
+          vx: bulletVel.x,
+          vy: bulletVel.y,
+          type: isTracer ? 'tracer' : 'bullet',
+          life: 5.0, // 5 seconds max flight time
+          initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y)
+        });
+        
+        // Right gun
+        game.projectiles.push({
+          x: rightGunPos.x,
+          y: rightGunPos.y,
+          vx: bulletVel.x,
+          vy: bulletVel.y,
+          type: isTracer ? 'tracer' : 'bullet',
+          life: 5.0,
+          initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y)
+        });
+        
+        // Spawn casing from bottom of aircraft
+        const casingPos = {
+          x: pos.x - Math.cos(angle) * 0.5, // Slightly behind center
+          y: pos.y - Math.sin(angle) * 0.5 + 0.8 // Below aircraft
+        };
+        
+        game.casings.push({
+          x: casingPos.x,
+          y: casingPos.y,
+          vx: vel.x + (Math.random() - 0.5) * 10, // Random sideways velocity
+          vy: vel.y + 15 + Math.random() * 10, // Downward with randomness
+          rotation: Math.random() * Math.PI * 2,
+          angularVel: (Math.random() - 0.5) * 20,
+          life: 10.0 // Casings last longer
+        });
+        
+        console.log('🔫 Fired guns! Projectiles:', game.projectiles.length, 'Casings:', game.casings.length);
+      }
+      
+      function updateProjectiles(dt) {
+        // Update bullets and tracers
+        for (let i = game.projectiles.length - 1; i >= 0; i--) {
+          const proj = game.projectiles[i];
+          
+          // Apply drag
+          const speed = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy);
+          const dragCoeff = 0.02; // Air resistance
+          const drag = dragCoeff * speed;
+          
+          if (speed > 0) {
+            proj.vx -= (proj.vx / speed) * drag * dt;
+            proj.vy -= (proj.vy / speed) * drag * dt;
+          }
+          
+          // Update position
+          proj.x += proj.vx * dt;
+          proj.y += proj.vy * dt;
+          
+          // Decrease life
+          proj.life -= dt;
+          
+          // Remove if expired
+          if (proj.life <= 0) {
+            game.projectiles.splice(i, 1);
+          }
+        }
+        
+        // Update casings
+        for (let i = game.casings.length - 1; i >= 0; i--) {
+          const casing = game.casings[i];
+          
+          // Apply gravity and drag
+          casing.vy += 9.81 * dt; // Gravity
+          
+          const speed = Math.sqrt(casing.vx * casing.vx + casing.vy * casing.vy);
+          const dragCoeff = 0.05; // More drag for casings
+          const drag = dragCoeff * speed;
+          
+          if (speed > 0) {
+            casing.vx -= (casing.vx / speed) * drag * dt;
+            casing.vy -= (casing.vy / speed) * drag * dt;
+          }
+          
+          // Update position and rotation
+          casing.x += casing.vx * dt;
+          casing.y += casing.vy * dt;
+          casing.rotation += casing.angularVel * dt;
+          
+          // Decrease life
+          casing.life -= dt;
+          
+          // Remove if expired
+          if (casing.life <= 0) {
+            game.casings.splice(i, 1);
+          }
+        }
+      }
       
       // Add collision detection for landing/crashing system
       world.on('begin-contact', (contact) => {
@@ -768,6 +942,76 @@
         
         ctx.restore();
         
+        // Render projectiles (bullets and tracers)
+        game.projectiles.forEach(proj => {
+          const screenPos = worldToScreen(proj.x, proj.y);
+          const speed = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy);
+          const angle = Math.atan2(proj.vy, proj.vx);
+          
+          ctx.save();
+          ctx.translate(screenPos.x, screenPos.y);
+          ctx.rotate(angle);
+          
+          if (proj.type === 'tracer') {
+            // Tracer gets smaller as it slows down
+            const speedRatio = speed / proj.initialSpeed;
+            const tracerLength = Math.max(2, 15 * speedRatio * game.camera.zoom);
+            const tracerWidth = Math.max(1, 3 * speedRatio * game.camera.zoom);
+            
+            if (assets.loaded.tracer && assets.tracer) {
+              const scale = tracerLength / assets.tracer.naturalWidth;
+              ctx.drawImage(assets.tracer, -tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
+            } else {
+              // Fallback tracer
+              ctx.fillStyle = `rgba(255, 100, 50, ${0.8 * speedRatio})`;
+              ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
+            }
+          } else {
+            // Regular bullet
+            const bulletSize = 2 * game.camera.zoom;
+            
+            if (assets.loaded.bullet && assets.bullet) {
+              const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
+              const w = assets.bullet.naturalWidth * scale;
+              const h = assets.bullet.naturalHeight * scale;
+              ctx.drawImage(assets.bullet, -w/2, -h/2, w, h);
+            } else {
+              // Fallback bullet
+              ctx.fillStyle = '#FFD700';
+              ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
+            }
+          }
+          
+          ctx.restore();
+        });
+        
+        // Render casings
+        game.casings.forEach(casing => {
+          const screenPos = worldToScreen(casing.x, casing.y);
+          
+          ctx.save();
+          ctx.translate(screenPos.x, screenPos.y);
+          ctx.rotate(casing.rotation);
+          
+          const casingSize = 3 * game.camera.zoom;
+          
+          if (assets.loaded.casing && assets.casing) {
+            const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
+            const w = assets.casing.naturalWidth * scale;
+            const h = assets.casing.naturalHeight * scale;
+            ctx.drawImage(assets.casing, -w/2, -h/2, w, h);
+          } else {
+            // Fallback casing
+            ctx.fillStyle = '#DAA520'; // Dark golden rod
+            ctx.strokeStyle = '#B8860B';
+            ctx.lineWidth = 1;
+            ctx.fillRect(-casingSize/2, -casingSize/3, casingSize, casingSize*2/3);
+            ctx.strokeRect(-casingSize/2, -casingSize/3, casingSize, casingSize*2/3);
+          }
+          
+          ctx.restore();
+        });
+        
         // Debug: Draw collision boundaries (press 'C' to toggle)
         if (game.showCollision) {
           ctx.save();
@@ -833,6 +1077,7 @@
         
         while (accumulator >= timeStep) {
           updatePhysics(timeStep);
+          updateProjectiles(timeStep);
           world.step(timeStep);
           accumulator -= timeStep;
         }
