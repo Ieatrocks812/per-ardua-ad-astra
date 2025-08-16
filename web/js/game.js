@@ -44,7 +44,13 @@
   };
 
   // Camera
-  const camera = { x: 0, y: 0 };
+  const camera = { 
+    x: 0, 
+    y: 0, 
+    zoom: 1.0, // zoom factor (1.0 = normal, 2.0 = 2x zoomed in, 0.5 = 2x zoomed out)
+    minZoom: 0.1,
+    maxZoom: 5.0
+  };
 
   // Controls
   const keysDown = new Set();
@@ -56,6 +62,24 @@
   });
   window.addEventListener('keyup', (e) => {
     keysDown.delete(e.key.toLowerCase());
+  });
+
+  // Zoom controls
+  window.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * zoomFactor));
+  });
+
+  // Keyboard zoom
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'q') {
+      camera.zoom = Math.max(camera.minZoom, camera.zoom * 0.9);
+      e.preventDefault();
+    } else if (e.key.toLowerCase() === 'e') {
+      camera.zoom = Math.min(camera.maxZoom, camera.zoom * 1.1);
+      e.preventDefault();
+    }
   });
 
   // Physics/aero constants
@@ -209,23 +233,23 @@
 
     // Scale background to a fixed world height for tiling
     const worldTileHeightMeters = 300; // how tall a tile is in world meters
-    const scale = (worldTileHeightMeters * metersToPixels) / img.naturalHeight;
+    const scale = (worldTileHeightMeters * metersToPixels * camera.zoom) / img.naturalHeight;
     const tileWidthPx = img.naturalWidth * scale;
     const tileHeightPx = img.naturalHeight * scale;
 
     // Parallax factor (background scrolls slower)
     const parallax = 0.6;
-    const camXpx = camera.x * metersToPixels * parallax;
-    const camYpx = camera.y * metersToPixels * parallax;
+    const camXpx = camera.x * metersToPixels * camera.zoom * parallax;
+    const camYpx = camera.y * metersToPixels * camera.zoom * parallax;
 
-    const startX = -((camXpx % tileWidthPx) + tileWidthPx) % tileWidthPx;
-    const startY = -((camYpx % tileHeightPx) + tileHeightPx) % tileHeightPx;
+    const startX = canvasWidth / 2 - ((camXpx % tileWidthPx) + tileWidthPx) % tileWidthPx;
+    const startY = canvasHeight / 2 - ((camYpx % tileHeightPx) + tileHeightPx) % tileHeightPx;
 
-    const cols = Math.ceil((canvasWidth + tileWidthPx) / tileWidthPx) + 1;
-    const rows = Math.ceil((canvasHeight + tileHeightPx) / tileHeightPx) + 1;
+    const cols = Math.ceil((canvasWidth + tileWidthPx) / tileWidthPx) + 2;
+    const rows = Math.ceil((canvasHeight + tileHeightPx) / tileHeightPx) + 2;
 
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
+    for (let row = -1; row < rows; row++) {
+      for (let col = -1; col < cols; col++) {
         const x = startX + col * tileWidthPx;
         const y = startY + row * tileHeightPx;
         context.drawImage(img, x, y, tileWidthPx, tileHeightPx);
@@ -234,15 +258,15 @@
   }
 
   function worldToScreen(wx, wy) {
-    const sx = (wx - camera.x) * metersToPixels + canvasWidth / 2;
-    const sy = (wy - camera.y) * metersToPixels + canvasHeight / 2;
+    const sx = (wx - camera.x) * metersToPixels * camera.zoom + canvasWidth / 2;
+    const sy = (wy - camera.y) * metersToPixels * camera.zoom + canvasHeight / 2;
     return { x: sx, y: sy };
   }
 
   function drawPlane() {
     const pos = worldToScreen(planeBody.getPosition().x, planeBody.getPosition().y);
     const img = images.plane;
-    const baseScale = 0.6; // image scale on screen
+    const baseScale = 0.6 * camera.zoom; // scale with zoom
     const width = img.naturalWidth * baseScale;
     const height = img.naturalHeight * baseScale;
     context.save();
@@ -294,7 +318,8 @@
       `Throttle: ${(state.throttle * 100).toFixed(0)}%`,
       `Altitude: ${(600 - planeBody.getPosition().y).toFixed(1)} m`,
       `Angle: ${(planeBody.getAngle() * 180 / Math.PI).toFixed(1)}°`,
-      'Controls: Up/Down pitch, +/- throttle, Space stabilize, R reset'
+      `Zoom: ${camera.zoom.toFixed(1)}x`,
+      'Controls: Up/Down pitch, +/- throttle, Q/E or mouse wheel zoom, Space stabilize, R reset'
     ];
     let y = 16;
     for (const line of lines) {
@@ -321,15 +346,10 @@
       accumulator -= fixedDt;
     }
 
-    // Camera follow
+    // Camera always follows plane (no smoothing, no lead)
     const pos = planeBody.getPosition();
-    const vel = planeBody.getLinearVelocity();
-    const lead = 2.0;
-    const targetCamX = pos.x + vel.x * lead;
-    const targetCamY = pos.y + vel.y * 0.5;
-    const smooth = 1 - Math.pow(0.001, dt);
-    camera.x += (targetCamX - camera.x) * smooth;
-    camera.y += (targetCamY - camera.y) * smooth;
+    camera.x = pos.x;
+    camera.y = pos.y;
 
     // Clear and draw
     context.clearRect(0, 0, canvasWidth, canvasHeight);
