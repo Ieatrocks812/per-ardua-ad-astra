@@ -390,29 +390,36 @@
 
   function drawBackground() {
     const img = images.background;
-    if (!img.complete || img.naturalWidth === 0) return;
+    if (img.complete && img.naturalWidth > 0) {
+      // Scale background to a fixed world height for tiling
+      const scale = (backgroundTileHeight * metersToPixels * camera.zoom) / img.naturalHeight;
+      const tileWidthPx = img.naturalWidth * scale;
+      const tileHeightPx = img.naturalHeight * scale;
 
-    // Scale background to a fixed world height for tiling
-    const scale = (backgroundTileHeight * metersToPixels * camera.zoom) / img.naturalHeight;
-    const tileWidthPx = img.naturalWidth * scale;
-    const tileHeightPx = img.naturalHeight * scale;
+      // Parallax factor (background scrolls slower)
+      const camXpx = camera.x * metersToPixels * camera.zoom * backgroundParallax;
+      const camYpx = camera.y * metersToPixels * camera.zoom * backgroundParallax;
 
-    // Parallax factor (background scrolls slower)
-    const camXpx = camera.x * metersToPixels * camera.zoom * backgroundParallax;
-    const camYpx = camera.y * metersToPixels * camera.zoom * backgroundParallax;
+      const startX = canvasWidth / 2 - ((camXpx % tileWidthPx) + tileWidthPx) % tileWidthPx;
+      const startY = canvasHeight / 2 - ((camYpx % tileHeightPx) + tileHeightPx) % tileHeightPx;
 
-    const startX = canvasWidth / 2 - ((camXpx % tileWidthPx) + tileWidthPx) % tileWidthPx;
-    const startY = canvasHeight / 2 - ((camYpx % tileHeightPx) + tileHeightPx) % tileHeightPx;
+      const cols = Math.ceil((canvasWidth + tileWidthPx) / tileWidthPx) + 2;
+      const rows = Math.ceil((canvasHeight + tileHeightPx) / tileHeightPx) + 2;
 
-    const cols = Math.ceil((canvasWidth + tileWidthPx) / tileWidthPx) + 2;
-    const rows = Math.ceil((canvasHeight + tileHeightPx) / tileHeightPx) + 2;
-
-    for (let row = -1; row < rows; row++) {
-      for (let col = -1; col < cols; col++) {
-        const x = startX + col * tileWidthPx;
-        const y = startY + row * tileHeightPx;
-        context.drawImage(img, x, y, tileWidthPx, tileHeightPx);
+      for (let row = -1; row < rows; row++) {
+        for (let col = -1; col < cols; col++) {
+          const x = startX + col * tileWidthPx;
+          const y = startY + row * tileHeightPx;
+          context.drawImage(img, x, y, tileWidthPx, tileHeightPx);
+        }
       }
+    } else {
+      // Fallback: simple gradient background
+      const gradient = context.createLinearGradient(0, 0, 0, canvasHeight);
+      gradient.addColorStop(0, '#87CEEB'); // sky blue
+      gradient.addColorStop(1, '#98FB98'); // pale green
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, canvasWidth, canvasHeight);
     }
   }
 
@@ -425,13 +432,26 @@
   function drawPlane() {
     const pos = worldToScreen(planeBody.getPosition().x, planeBody.getPosition().y);
     const img = images.plane;
-    const baseScale = 0.6 * camera.zoom; // scale with zoom
-    const width = img.naturalWidth * baseScale;
-    const height = img.naturalHeight * baseScale;
+    
     context.save();
     context.translate(pos.x, pos.y);
     context.rotate(planeBody.getAngle());
-    context.drawImage(img, -width * 0.4, -height * 0.5, width, height);
+    
+    if (img.complete && img.naturalWidth > 0) {
+      const baseScale = 0.6 * camera.zoom; // scale with zoom
+      const width = img.naturalWidth * baseScale;
+      const height = img.naturalHeight * baseScale;
+      context.drawImage(img, -width * 0.4, -height * 0.5, width, height);
+    } else {
+      // Fallback: draw simple rectangle
+      context.fillStyle = '#4169E1'; // royal blue
+      context.strokeStyle = '#000080'; // navy
+      context.lineWidth = 2;
+      const size = 20 * camera.zoom;
+      context.fillRect(-size * 0.6, -size * 0.3, size * 1.2, size * 0.6);
+      context.strokeRect(-size * 0.6, -size * 0.3, size * 1.2, size * 0.6);
+    }
+    
     context.restore();
   }
 
@@ -471,21 +491,29 @@
       const pos = worldToScreen(enemy.body.getPosition().x, enemy.body.getPosition().y);
       const img = enemy.type === 'ju88' ? images.enemyJu88 : images.enemyBf109;
       
-      if (!img.complete || img.naturalWidth === 0) continue;
-      
-      const baseScale = (enemy.type === 'ju88' ? 0.8 : 0.6) * camera.zoom;
-      const width = img.naturalWidth * baseScale;
-      const height = img.naturalHeight * baseScale;
-      
       context.save();
       context.translate(pos.x, pos.y);
       context.rotate(enemy.body.getAngle());
-      context.drawImage(img, -width * 0.5, -height * 0.5, width, height);
       
-      // Health indicator
-      if (enemy.health < (enemy.type === 'ju88' ? 3 : 2)) {
-        context.fillStyle = 'red';
-        context.fillRect(-width * 0.3, -height * 0.8, (width * 0.6) * (enemy.health / (enemy.type === 'ju88' ? 3 : 2)), 3);
+      if (img.complete && img.naturalWidth > 0) {
+        const baseScale = (enemy.type === 'ju88' ? 0.8 : 0.6) * camera.zoom;
+        const width = img.naturalWidth * baseScale;
+        const height = img.naturalHeight * baseScale;
+        context.drawImage(img, -width * 0.5, -height * 0.5, width, height);
+        
+        // Health indicator
+        if (enemy.health < (enemy.type === 'ju88' ? 3 : 2)) {
+          context.fillStyle = 'red';
+          context.fillRect(-width * 0.3, -height * 0.8, (width * 0.6) * (enemy.health / (enemy.type === 'ju88' ? 3 : 2)), 3);
+        }
+      } else {
+        // Fallback: draw simple rectangle
+        context.fillStyle = enemy.type === 'ju88' ? '#8B0000' : '#DC143C'; // dark red for enemies
+        context.strokeStyle = '#000000';
+        context.lineWidth = 1;
+        const size = (enemy.type === 'ju88' ? 25 : 18) * camera.zoom;
+        context.fillRect(-size * 0.6, -size * 0.3, size * 1.2, size * 0.6);
+        context.strokeRect(-size * 0.6, -size * 0.3, size * 1.2, size * 0.6);
       }
       
       context.restore();
@@ -548,25 +576,21 @@
     requestAnimationFrame(frame);
   }
 
-  // Start when images are loaded
-  let assetsLoaded = 0;
-  const required = Object.keys(images).length;
+  // Start game immediately, images will load progressively
+  console.log('Starting game...', Object.values(images).map(img => img.src));
+  
   Object.values(images).forEach((img, index) => {
     img.addEventListener('load', () => {
-      console.log(`Image ${index + 1}/${required} loaded:`, img.src);
-      assetsLoaded += 1;
-      if (assetsLoaded >= required) {
-        console.log('All assets loaded, starting game...');
-        lastTime = performance.now();
-        requestAnimationFrame(frame);
-      }
+      console.log(`Image ${index + 1} loaded:`, img.src);
     });
     img.addEventListener('error', (e) => {
       console.error('Failed to load image:', img.src, e);
     });
   });
 
-  console.log('Loading assets...', Object.values(images).map(img => img.src));
+  // Start immediately
+  lastTime = performance.now();
+  requestAnimationFrame(frame);
 })();
 
 
