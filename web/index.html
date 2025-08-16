@@ -3,68 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sprite Viewer</title>
+  <title>Per Ardua ad Astra - Flight Sim</title>
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; margin: 0; padding: 24px; }
-    h1 { margin: 0 0 16px 0; font-size: 20px; }
-    .section { margin: 24px 0; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; align-items: start; }
-    figure { margin: 0; padding: 12px; border: 1px solid #aaa4; border-radius: 8px; background: #00000008; }
-    figcaption { margin-top: 8px; font-size: 12px; word-break: break-all; }
-    img { max-width: 100%; height: auto; image-rendering: pixelated; }
-    .note { font-size: 12px; opacity: 0.8; }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: #1a1a1a; }
+    #gameCanvas { display: block; width: 100vw; height: 100vh; }
+    .hud {
+      position: fixed; top: 16px; left: 16px; color: white; font: 14px/1.4 system-ui, monospace;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8); pointer-events: none; user-select: none;
+    }
+    .controls {
+      position: fixed; bottom: 16px; left: 16px; color: white; font: 12px/1.4 system-ui;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8); pointer-events: none; user-select: none;
+    }
   </style>
-  <script>
-    // No service workers here on purpose to avoid webview restrictions
-  </script>
-  </head>
-  <body>
-    <h1>Sprite Viewer</h1>
-    <p class="note">Served over http(s) in a normal browser, not an IDE webview. This page does not register a Service Worker.</p>
-
-    <div class="section">
-      <h2>Aircraft — Enemies</h2>
-      <div class="grid">
-        <figure>
-          <img src="../assets/sprites/aircraft/enemies/bf-109 facing left.png" alt="bf-109 facing left" />
-          <figcaption>assets/sprites/aircraft/enemies/bf-109 facing left.png</figcaption>
-        </figure>
-        <figure>
-          <img src="../assets/sprites/aircraft/enemies/ju-88.png" alt="ju-88" />
-          <figcaption>assets/sprites/aircraft/enemies/ju-88.png</figcaption>
-        </figure>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Aircraft — Player</h2>
-      <div class="grid">
-        <figure>
-          <img src="../assets/sprites/aircraft/player/Spitfire facing left.png" alt="Spitfire facing left" />
-          <figcaption>assets/sprites/aircraft/player/Spitfire facing left.png</figcaption>
-        </figure>
-        <figure>
-          <img src="../assets/sprites/aircraft/player/Spitfire facing right.png" alt="Spitfire facing right" />
-          <figcaption>assets/sprites/aircraft/player/Spitfire facing right.png</figcaption>
-        </figure>
-      </div>
-    </div>
-
-    
-
-    <div class="section">
-      <h2>Environment</h2>
-      <div class="grid">
-        <figure>
-          <img src="../assets/sprites/environment/background.png" alt="background" />
-          <figcaption>assets/sprites/environment/background.png</figcaption>
-        </figure>
-      </div>
-    </div>
-    
-
-  </body>
-  </html>
-
-
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div class="hud">
+    <div>Speed: <span id="speed">0</span> m/s</div>
+    <div>Throttle: <span id="throttle">0</span>%</div>
+    <div>Altitude: <span id="altitude">0</span> m</div>
+  </div>
+  <div class="controls">
+    W/S: Throttle • Arrow Keys: Pitch/Roll • R: Reset
+  </div>
+  
+  <script src="https://unpkg.com/planck-js@0.3.0/dist/planck.min.js"></script>
+  <script src="./js/game.js"></script>
+</body>
+</html>
