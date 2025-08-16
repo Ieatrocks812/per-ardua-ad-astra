@@ -230,7 +230,7 @@
       // Create aircraft - spawn in center of main map above ground
       const aircraft = world.createBody({
         type: 'dynamic',
-        position: pl.Vec2(0, 600), // Center of main map, safe altitude above ground
+        position: pl.Vec2(0, 1500), // Center of main map, safe altitude above y=0 ground
         angle: 0,
         linearDamping: 0.1,
         angularDamping: 0.9
@@ -247,14 +247,14 @@
       const groundBodies = [];
       
       function createGroundCollision() {
-        // Create infinite ground collision - large enough to cover any reasonable flight distance
-        const groundLevel = 1200; // Y position where ground starts
-        const groundThickness = 600; // How thick the ground collision is
+        // Create infinite ground collision at y=0 (bottom of map)
+        const groundLevel = 0; // Y position where ground starts (bottom of map)
+        const groundThickness = 200; // How thick the ground collision is (underground)
         const infiniteWidth = 100000; // Very wide ground - 100km in each direction
         
         const groundBody = world.createBody({
           type: 'static',
-          position: pl.Vec2(0, groundLevel + groundThickness / 2)
+          position: pl.Vec2(0, groundLevel - groundThickness / 2) // Below y=0
         });
         
         groundBody.createFixture({
@@ -266,7 +266,7 @@
         groundBodies.push({
           body: groundBody,
           x: 0,
-          y: groundLevel + groundThickness / 2,
+          y: groundLevel - groundThickness / 2,
           width: infiniteWidth,
           height: groundThickness,
           isMainGround: true
@@ -323,7 +323,7 @@
         
         // Reset
         if (reset) {
-          aircraft.setTransform(pl.Vec2(0, 600), 0); // Reset to center of main map, safe altitude
+          aircraft.setTransform(pl.Vec2(0, 1500), 0); // Reset to center of main map, safe altitude
           aircraft.setLinearVelocity(pl.Vec2(0, 0));
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
@@ -402,7 +402,7 @@
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
         
         // Background - main map in center, tileable on sides
-        const groundLevel = 1200;
+        const groundLevel = 0; // Map bottom at y=0
         const mapHeight = WORLD_HEIGHT;
         
         if (assets.loaded.map && assets.map && assets.loaded.tileableMap && assets.tileableMap) {
@@ -410,9 +410,8 @@
           const mainMapWidth = WORLD_WIDTH; // 4000m wide
           const mainMapPixelWidth = mainMapWidth * SCALE * game.camera.zoom;
           const mainMapPixelHeight = mapHeight * SCALE * game.camera.zoom;
-          const mainMapPos = worldToScreen(-mainMapWidth/2, groundLevel - mapHeight);
-          
-          // Draw main map in center
+          // Draw main map in center (bottom at y=0, top at y=mapHeight)
+          const mainMapPos = worldToScreen(-mainMapWidth/2, 0);
           ctx.drawImage(assets.map, mainMapPos.x, mainMapPos.y, mainMapPixelWidth, mainMapPixelHeight);
           
           // Calculate tileable map dimensions
@@ -425,7 +424,7 @@
           const leftStartX = -mainMapWidth/2;
           const visibleLeftStart = Math.floor((game.camera.x - canvasWidth/(2*SCALE*game.camera.zoom) - leftStartX) / tileableMapWorldWidth) * tileableMapWorldWidth + leftStartX;
           for (let x = visibleLeftStart; x > game.camera.x - canvasWidth/(SCALE*game.camera.zoom); x -= tileableMapWorldWidth) {
-            const tilePos = worldToScreen(x - tileableMapWorldWidth, groundLevel - mapHeight);
+            const tilePos = worldToScreen(x - tileableMapWorldWidth, 0);
             ctx.drawImage(assets.tileableMap, tilePos.x, tilePos.y, tileableMapPixelWidth, tileableMapPixelHeight);
           }
           
@@ -433,7 +432,7 @@
           const rightStartX = mainMapWidth/2;
           const visibleRightStart = Math.floor((game.camera.x - canvasWidth/(2*SCALE*game.camera.zoom) - rightStartX) / tileableMapWorldWidth) * tileableMapWorldWidth + rightStartX;
           for (let x = visibleRightStart; x < game.camera.x + canvasWidth/(SCALE*game.camera.zoom); x += tileableMapWorldWidth) {
-            const tilePos = worldToScreen(x, groundLevel - mapHeight);
+            const tilePos = worldToScreen(x, 0);
             ctx.drawImage(assets.tileableMap, tilePos.x, tilePos.y, tileableMapPixelWidth, tileableMapPixelHeight);
           }
           
@@ -519,7 +518,7 @@
         
         document.getElementById('speed').textContent = Math.round(speed);
         document.getElementById('throttle').textContent = Math.round(game.throttle * 100);
-        document.getElementById('altitude').textContent = Math.round(Math.max(0, 1200 - pos.y)); // Updated for new ground level
+        document.getElementById('altitude').textContent = Math.round(Math.max(0, pos.y)); // Altitude = y position (y=0 is ground)
         document.getElementById('zoom').textContent = game.camera.zoom.toFixed(1);
         
         // Show crash status
