@@ -121,11 +121,38 @@
         console.error('✗ Spitfire failed to load:', e);
       };
       
-      // Load images
-      assets.map.src = '../assets/sprites/environment/map.png';
-      assets.spitfire.src = '../assets/sprites/aircraft/player/Spitfire facing right.png';
+      // Load images - try both relative paths
+      const mapPath = '../assets/sprites/environment/map.png';
+      const spitfirePath = '../assets/sprites/aircraft/player/Spitfire facing right.png';
+      
+      console.log('Attempting to load:', mapPath);
+      console.log('Attempting to load:', spitfirePath);
+      
+      assets.map.src = mapPath;
+      assets.spitfire.src = spitfirePath;
+      
+      // Test if images can be reached by trying to fetch them
+      fetch(mapPath)
+        .then(response => console.log('Map fetch result:', response.status, response.statusText))
+        .catch(err => {
+          console.error('Map fetch failed:', err);
+          // Try alternative path
+          console.log('Trying alternative path...');
+          assets.map.src = './assets/sprites/environment/map.png';
+        });
+        
+      fetch(spitfirePath)
+        .then(response => console.log('Spitfire fetch result:', response.status, response.statusText))
+        .catch(err => {
+          console.error('Spitfire fetch failed:', err);
+          // Try alternative path
+          console.log('Trying alternative spitfire path...');
+          assets.spitfire.src = './assets/sprites/aircraft/player/Spitfire facing right.png';
+        });
       
       console.log('Loading assets...');
+      console.log('Current page URL:', window.location.href);
+      console.log('Base URL:', window.location.origin + window.location.pathname);
       
       // =============================================================================
       // GAME STATE
