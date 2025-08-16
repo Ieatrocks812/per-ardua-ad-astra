@@ -54,10 +54,69 @@
     W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • F: Flip • G: Gear • C: Debug • R: Reset
   </div>
 
+  <!-- Start Screen -->
+  <div id="startScreen" style="
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(135deg, #87CEEB 0%, #4682B4 50%, #2F4F4F 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    font-family: 'Arial', sans-serif;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  ">
+    <h1 style="font-size: 4rem; margin-bottom: 1rem; text-align: center;">
+      Per Ardua ad Astra
+    </h1>
+    <p style="font-size: 1.5rem; margin-bottom: 3rem; text-align: center; opacity: 0.9;">
+      "Through Adversity to the Stars"
+    </p>
+    <button id="startButton" style="
+      font-size: 1.5rem;
+      padding: 1rem 3rem;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid white;
+      color: white;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      text-shadow: none;
+      font-weight: bold;
+    " onmouseover="this.style.background='rgba(255,255,255,0.3)'; this.style.transform='scale(1.1)'" 
+       onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.transform='scale(1)'">
+      START FLIGHT
+    </button>
+    <div style="margin-top: 2rem; text-align: center; opacity: 0.7; font-size: 0.9rem;">
+      <p>🎮 Use W/S for throttle, A/D for pitch, arrows for roll</p>
+      <p>✈️ Realistic flight physics with altitude effects above 5000m</p>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/planck-js@0.3.0/dist/planck.min.js"></script>
   <script>
     (() => {
       'use strict';
+      
+      // Game state
+      let gameStarted = false;
+      
+      // Start screen functionality
+      document.getElementById('startButton').addEventListener('click', () => {
+        console.log('🚀 Starting game...');
+        document.getElementById('startScreen').style.display = 'none';
+        gameStarted = true;
+        initializeGame();
+      });
+      
+      // Initialize game function
+      function initializeGame() {
 
       // =============================================================================
       // SETUP
@@ -784,9 +843,11 @@
         requestAnimationFrame(gameLoop);
       }
       
-      // Start
-      console.log('Starting flight simulator...');
-      gameLoop(performance.now());
+      // Start the loop only after initializeGame() is invoked from Start button
+      console.log('Flight simulator ready. Awaiting Start.');
+      }
+      
+      // Do not auto-start; wait for Start button click (handled above)
       
     })();
   </script>
