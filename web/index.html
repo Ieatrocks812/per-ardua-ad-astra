@@ -76,6 +76,31 @@
       // Physics world
       const world = new pl.World(pl.Vec2(0, 9.81));
       
+      // Remove Box2D velocity limits for higher speeds
+      // Default is 2.0 units per timestep (120 m/s at 60fps)
+      console.log('🔧 Attempting to override Box2D velocity limits...');
+      
+      if (world.setMaxLinearVelocity) {
+        world.setMaxLinearVelocity(10.0); // Allow up to 600 m/s
+        console.log('✅ Set world max linear velocity to 10.0');
+      }
+      
+      // Alternative method for Planck.js
+      if (pl.Settings) {
+        console.log('📊 Original Settings:', { 
+          maxTranslation: pl.Settings.maxTranslation, 
+          maxLinearVelocity: pl.Settings.maxLinearVelocity 
+        });
+        pl.Settings.maxTranslation = 10.0; // Increase from default 2.0
+        pl.Settings.maxLinearVelocity = 600.0; // Direct velocity limit
+        console.log('✅ Updated Settings:', { 
+          maxTranslation: pl.Settings.maxTranslation, 
+          maxLinearVelocity: pl.Settings.maxLinearVelocity 
+        });
+      } else {
+        console.log('⚠️ pl.Settings not available');
+      }
+      
       // Canvas setup
       let canvasWidth = 0;
       let canvasHeight = 0;
