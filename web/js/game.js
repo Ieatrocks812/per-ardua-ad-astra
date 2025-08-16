@@ -7,11 +7,15 @@
   const images = {
     background: new Image(),
     plane: new Image(),
+    enemyBf109: new Image(),
+    enemyJu88: new Image(),
   };
 
   // Asset paths (relative to this html file)
   images.background.src = '../assets/sprites/environment/background.png';
   images.plane.src = '../assets/sprites/aircraft/player/Spitfire facing right.png';
+  images.enemyBf109.src = '../assets/sprites/aircraft/enemies/bf-109 facing left.png';
+  images.enemyJu88.src = '../assets/sprites/aircraft/enemies/ju-88.png';
 
   let canvasWidth = 0;
   let canvasHeight = 0;
@@ -31,17 +35,18 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // World scale: meters to pixels
-  const metersToPixels = 6; // 1 m = 6 px
-
   // Box2D world
   const pl = window.planck;
-  const world = new pl.World(pl.Vec2(0, 9.81)); // gravity downward
+  const world = new pl.World(pl.Vec2(0, gravity)); // gravity downward
 
   // Aircraft control state
   const state = {
     throttle: 0.6, // 0..1
   };
+
+  // Enemy management
+  const enemies = [];
+  let lastEnemySpawn = 0;
 
   // Camera
   const camera = { 
@@ -82,7 +87,16 @@
     }
   });
 
-  // Physics/aero constants
+  // =============================================================================
+  // PHYSICS & SIMULATION CONSTANTS - TWEAK THESE FOR GAMEPLAY
+  // =============================================================================
+  
+  // World settings
+  const metersToPixels = 6; // 1 m = 6 px
+  const gravity = 9.81; // m/s^2 (Box2D handles this)
+  const fixedDt = 1 / 60; // physics timestep
+  
+  // Player aircraft physics
   const targetMassKg = 3000; // desired aircraft mass
   const airDensity = 1.225; // kg/m^3
   const wingArea = 16; // m^2
@@ -94,6 +108,25 @@
   const aspectRatio = 7;
   const oswaldEff = 0.8;
   const controlTorque = 22000; // N*m
+  
+  // Enemy settings
+  const enemySpawnDistance = 2000; // meters ahead of player
+  const enemyDespawnDistance = 3000; // meters behind player
+  const maxEnemies = 8;
+  const enemySpawnInterval = 3000; // milliseconds
+  const enemySpeed = 40; // m/s
+  const enemyTurnRate = 0.8; // rad/s
+  
+  // Ground settings
+  const groundY = 600; // meters
+  const groundSpacing = 50; // meters between T shapes
+  const groundTWidth = 40; // meters
+  const groundTHeight = 25; // meters
+  const groundThickness = 3; // meters
+  
+  // Camera settings
+  const backgroundParallax = 0.6; // background scroll factor
+  const backgroundTileHeight = 300; // meters
 
   function wrapPi(angle) {
     while (angle > Math.PI) angle -= 2 * Math.PI;
@@ -122,33 +155,154 @@
   });
 
   // Create ground: repeating T shapes
-  const groundY = 600; // meters
   const groundTs = [];
   function createGroundRow() {
-    const topWidth = 40; // m
-    const topThickness = 3; // m
-    const stemHeight = 25; // m (downward)
-    const stemThickness = 3; // m
-    const spacing = 50; // m between Ts
     const startX = -5000;
     const endX = 5000;
 
-    for (let x = startX; x <= endX; x += spacing) {
+    for (let x = startX; x <= endX; x += groundSpacing) {
       const body = world.createBody({ type: 'static', position: pl.Vec2(x, groundY) });
       // Top bar centered at (0,0) of the body
-      body.createFixture(pl.Box(topWidth / 2, topThickness / 2, pl.Vec2(0, 0), 0), {
+      body.createFixture(pl.Box(groundTWidth / 2, groundThickness / 2, pl.Vec2(0, 0), 0), {
         friction: 0.9,
         restitution: 0.0,
       });
       // Stem extends downward from the top bar
       body.createFixture(
-        pl.Box(stemThickness / 2, stemHeight / 2, pl.Vec2(0, topThickness / 2 + stemHeight / 2), 0),
+        pl.Box(groundThickness / 2, groundTHeight / 2, pl.Vec2(0, groundThickness / 2 + groundTHeight / 2), 0),
         { friction: 0.9, restitution: 0.0 }
       );
-      groundTs.push({ body, topWidth, topThickness, stemHeight, stemThickness });
+      groundTs.push({ 
+        body, 
+        topWidth: groundTWidth, 
+        topThickness: groundThickness, 
+        stemHeight: groundTHeight, 
+        stemThickness: groundThickness 
+      });
     }
   }
   createGroundRow();
+
+  // Enemy creation and management
+  function createEnemy(x, y, type = 'bf109') {
+    const dims = type === 'ju88' ? { width: 12, height: 4 } : { width: 8, height: 3 };
+    const mass = type === 'ju88' ? 4000 : 2500;
+    
+    const body = world.createBody({
+      type: 'dynamic',
+      position: pl.Vec2(x, y),
+      angle: Math.PI, // facing left initially
+      angularDamping: 0.8,
+      linearDamping: 0.1,
+    });
+    
+    const area = dims.width * dims.height;
+    const density = mass / area;
+    
+    body.createFixture(pl.Box(dims.width / 2, dims.height / 2), {
+      density: density,
+      friction: 0.3,
+      restitution: 0.2,
+      filterCategoryBits: 0x0004, // enemy category
+      filterMaskBits: 0x0002 | 0x0001, // collide with player and ground
+    });
+    
+    const enemy = {
+      body,
+      type,
+      dims,
+      mass,
+      aiState: 'patrol',
+      targetAngle: Math.PI,
+      lastDirectionChange: Date.now(),
+      health: type === 'ju88' ? 3 : 2,
+    };
+    
+    // Set initial velocity
+    body.setLinearVelocity(pl.Vec2(-enemySpeed * 0.8, 0));
+    
+    enemies.push(enemy);
+    return enemy;
+  }
+
+  function updateEnemies(dt) {
+    const playerPos = planeBody.getPosition();
+    const now = Date.now();
+    
+    // Spawn enemies ahead of player
+    if (now - lastEnemySpawn > enemySpawnInterval && enemies.length < maxEnemies) {
+      const spawnX = playerPos.x + enemySpawnDistance + (Math.random() - 0.5) * 500;
+      const spawnY = 200 + Math.random() * 300; // altitude variation
+      const type = Math.random() > 0.7 ? 'ju88' : 'bf109';
+      createEnemy(spawnX, spawnY, type);
+      lastEnemySpawn = now;
+    }
+    
+    // Update enemy AI and remove distant enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const enemy = enemies[i];
+      const enemyPos = enemy.body.getPosition();
+      
+      // Remove if too far behind player
+      if (enemyPos.x < playerPos.x - enemyDespawnDistance) {
+        world.destroyBody(enemy.body);
+        enemies.splice(i, 1);
+        continue;
+      }
+      
+      // Simple AI behavior
+      updateEnemyAI(enemy, dt, playerPos);
+    }
+  }
+
+  function updateEnemyAI(enemy, dt, playerPos) {
+    const pos = enemy.body.getPosition();
+    const vel = enemy.body.getLinearVelocity();
+    const angle = enemy.body.getAngle();
+    const now = Date.now();
+    
+    // Simple patrol/intercept behavior
+    let targetAngle = enemy.targetAngle;
+    
+    if (enemy.aiState === 'patrol') {
+      // Random direction changes
+      if (now - enemy.lastDirectionChange > 2000 + Math.random() * 3000) {
+        enemy.targetAngle += (Math.random() - 0.5) * Math.PI * 0.5;
+        enemy.lastDirectionChange = now;
+      }
+      
+      // If player is close, switch to intercept
+      const distToPlayer = Math.hypot(pos.x - playerPos.x, pos.y - playerPos.y);
+      if (distToPlayer < 800) {
+        enemy.aiState = 'intercept';
+      }
+    } else if (enemy.aiState === 'intercept') {
+      // Head towards player
+      targetAngle = Math.atan2(playerPos.y - pos.y, playerPos.x - pos.x);
+      
+      // Return to patrol if player is far
+      const distToPlayer = Math.hypot(pos.x - playerPos.x, pos.y - playerPos.y);
+      if (distToPlayer > 1200) {
+        enemy.aiState = 'patrol';
+        enemy.lastDirectionChange = now;
+      }
+    }
+    
+    // Apply turning towards target angle
+    const angleDiff = wrapPi(targetAngle - angle);
+    const turnForce = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), enemyTurnRate) * 8000;
+    enemy.body.applyTorque(turnForce, true);
+    
+    // Apply thrust in facing direction
+    const thrust = enemy.type === 'ju88' ? enemySpeed * 0.6 : enemySpeed * 0.8;
+    const heading = { x: Math.cos(angle), y: Math.sin(angle) };
+    enemy.body.applyForceToCenter(pl.Vec2(heading.x * thrust * 800, heading.y * thrust * 800), true);
+    
+    // Avoid ground
+    if (pos.y > groundY - 100) {
+      enemy.body.applyForceToCenter(pl.Vec2(0, -5000), true);
+    }
+  }
 
   function updateControlsAndForces(dt) {
     const pitchUp = keysDown.has('arrowup') || keysDown.has('w');
@@ -163,6 +317,13 @@
       planeBody.setLinearVelocity(pl.Vec2(30, 0));
       planeBody.setAngularVelocity(0);
       state.throttle = 0.6;
+      
+      // Clear enemies
+      for (const enemy of enemies) {
+        world.destroyBody(enemy.body);
+      }
+      enemies.length = 0;
+      lastEnemySpawn = 0;
     }
 
     // Throttle adjust
@@ -232,15 +393,13 @@
     if (!img.complete || img.naturalWidth === 0) return;
 
     // Scale background to a fixed world height for tiling
-    const worldTileHeightMeters = 300; // how tall a tile is in world meters
-    const scale = (worldTileHeightMeters * metersToPixels * camera.zoom) / img.naturalHeight;
+    const scale = (backgroundTileHeight * metersToPixels * camera.zoom) / img.naturalHeight;
     const tileWidthPx = img.naturalWidth * scale;
     const tileHeightPx = img.naturalHeight * scale;
 
     // Parallax factor (background scrolls slower)
-    const parallax = 0.6;
-    const camXpx = camera.x * metersToPixels * camera.zoom * parallax;
-    const camYpx = camera.y * metersToPixels * camera.zoom * parallax;
+    const camXpx = camera.x * metersToPixels * camera.zoom * backgroundParallax;
+    const camYpx = camera.y * metersToPixels * camera.zoom * backgroundParallax;
 
     const startX = canvasWidth / 2 - ((camXpx % tileWidthPx) + tileWidthPx) % tileWidthPx;
     const startY = canvasHeight / 2 - ((camYpx % tileHeightPx) + tileHeightPx) % tileHeightPx;
@@ -307,6 +466,32 @@
     context.restore();
   }
 
+  function drawEnemies() {
+    for (const enemy of enemies) {
+      const pos = worldToScreen(enemy.body.getPosition().x, enemy.body.getPosition().y);
+      const img = enemy.type === 'ju88' ? images.enemyJu88 : images.enemyBf109;
+      
+      if (!img.complete || img.naturalWidth === 0) continue;
+      
+      const baseScale = (enemy.type === 'ju88' ? 0.8 : 0.6) * camera.zoom;
+      const width = img.naturalWidth * baseScale;
+      const height = img.naturalHeight * baseScale;
+      
+      context.save();
+      context.translate(pos.x, pos.y);
+      context.rotate(enemy.body.getAngle());
+      context.drawImage(img, -width * 0.5, -height * 0.5, width, height);
+      
+      // Health indicator
+      if (enemy.health < (enemy.type === 'ju88' ? 3 : 2)) {
+        context.fillStyle = 'red';
+        context.fillRect(-width * 0.3, -height * 0.8, (width * 0.6) * (enemy.health / (enemy.type === 'ju88' ? 3 : 2)), 3);
+      }
+      
+      context.restore();
+    }
+  }
+
   function drawHud() {
     const vel = planeBody.getLinearVelocity();
     const speed = Math.hypot(vel.x, vel.y);
@@ -316,9 +501,10 @@
     const lines = [
       `Speed: ${speed.toFixed(1)} m/s`,
       `Throttle: ${(state.throttle * 100).toFixed(0)}%`,
-      `Altitude: ${(600 - planeBody.getPosition().y).toFixed(1)} m`,
+      `Altitude: ${(groundY - planeBody.getPosition().y).toFixed(1)} m`,
       `Angle: ${(planeBody.getAngle() * 180 / Math.PI).toFixed(1)}°`,
       `Zoom: ${camera.zoom.toFixed(1)}x`,
+      `Enemies: ${enemies.length}`,
       'Controls: Up/Down pitch, +/- throttle, Q/E or mouse wheel zoom, Space stabilize, R reset'
     ];
     let y = 16;
@@ -332,14 +518,14 @@
   // Fixed time-step for Box2D
   let lastTime = performance.now();
   let accumulator = 0;
-  const fixedDt = 1 / 60;
   function frame(now) {
     let dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
     lastTime = now;
     accumulator += dt;
 
-    // Update input/forces once per render (minor difference, forces re-applied each step below)
+    // Update input/forces once per render
     updateControlsAndForces(fixedDt);
+    updateEnemies(fixedDt);
 
     while (accumulator >= fixedDt) {
       world.step(fixedDt);
@@ -355,6 +541,7 @@
     context.clearRect(0, 0, canvasWidth, canvasHeight);
     drawBackground();
     drawGround();
+    drawEnemies();
     drawPlane();
     drawHud();
 
