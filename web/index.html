@@ -320,7 +320,7 @@
         position: pl.Vec2(0, -300), // 300 physics units above ground (visually 600m)
         angle: 0,
         linearDamping: 0.02, // Reduced from 0.1 for higher top speeds
-        angularDamping: 2.5 // High damping for instant pitch stop when controls released
+        angularDamping: 8.0 // Very high damping for instant stop when controls released (works with force-based controls)
       });
       
       aircraft.createFixture({
@@ -460,15 +460,55 @@
         if (zoomIn) game.camera.zoom = Math.min(game.camera.maxZoom, game.camera.zoom + dt * 1.2);
         if (zoomOut) game.camera.zoom = Math.max(game.camera.minZoom, game.camera.zoom - dt * 1.2);
         
-        // Flight controls - High torque to overcome high angular damping for instant response
-        const torque = 60000; // Much higher torque to overcome increased damping
-        if (pitchUp) aircraft.applyTorque(-torque, true);
-        if (pitchDown) aircraft.applyTorque(torque, true);
-        if (rollLeft) aircraft.applyTorque(-torque * 0.7, true);
-        if (rollRight) aircraft.applyTorque(torque * 0.7, true);
+        // Flight controls - Aerodynamic control surfaces (more realistic than pure torque)
+        const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+        const controlEffectiveness = Math.min(speed * 0.1, 1.0); // Controls more effective at higher speeds
+        const controlForce = 15000 * controlEffectiveness; // Reduced from pure torque approach
         
-        // Thrust - Further increased for higher top speeds
-        const maxThrust = 120000; // Quadrupled from original 30000 for much higher speeds
+        // Apply control forces at aircraft extremities (like real control surfaces)
+        const noseOffset = 2.0; // Distance from center to nose/tail (scaled)
+        const wingOffset = 1.5; // Distance from center to wingtips (scaled)
+        
+        if (pitchUp) {
+          // Apply upward force at tail (nose goes up)
+          const tailPos = aircraft.getWorldPoint(pl.Vec2(-noseOffset, 0));
+          aircraft.applyForce(pl.Vec2(0, -controlForce), tailPos, true);
+        }
+        if (pitchDown) {
+          // Apply downward force at tail (nose goes down)
+          const tailPos = aircraft.getWorldPoint(pl.Vec2(-noseOffset, 0));
+          aircraft.applyForce(pl.Vec2(0, controlForce), tailPos, true);
+        }
+        if (rollLeft) {
+          // Apply upward force at right wing, downward at left wing
+          const rightWing = aircraft.getWorldPoint(pl.Vec2(0, wingOffset));
+          const leftWing = aircraft.getWorldPoint(pl.Vec2(0, -wingOffset));
+          aircraft.applyForce(pl.Vec2(0, -controlForce * 0.5), rightWing, true);
+          aircraft.applyForce(pl.Vec2(0, controlForce * 0.5), leftWing, true);
+        }
+        if (rollRight) {
+          // Apply downward force at right wing, upward at left wing
+          const rightWing = aircraft.getWorldPoint(pl.Vec2(0, wingOffset));
+          const leftWing = aircraft.getWorldPoint(pl.Vec2(0, -wingOffset));
+          aircraft.applyForce(pl.Vec2(0, controlForce * 0.5), rightWing, true);
+          aircraft.applyForce(pl.Vec2(0, -controlForce * 0.5), leftWing, true);
+        }
+        
+        // Thrust - Further increased for higher top speeds with altitude reduction
+        let maxThrust = 120000; // Quadrupled from original 30000 for much higher speeds
+        
+        // Altitude-based thrust reduction (same as lift)
+        const visualAltitude = -pos.y * VISUAL_SCALE; // Convert to visual altitude
+        if (visualAltitude > 5000) {
+          if (visualAltitude >= 5250) {
+            maxThrust = 0; // No thrust above 5250m (engine failure)
+          } else {
+            // Linear reduction from 5000m to 5250m
+            const reductionFactor = 1 - ((visualAltitude - 5000) / 250);
+            maxThrust *= reductionFactor;
+          }
+        }
+        
         const thrust = game.throttle * maxThrust;
         const thrustX = Math.cos(angle) * thrust;
         const thrustY = Math.sin(angle) * thrust;
