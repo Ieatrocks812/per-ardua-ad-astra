@@ -51,7 +51,7 @@
   </div>
   
   <div class="controls">
-    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • F: Flip • G: Gear • Space: Fire • C: Debug • R: Reset
+    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • F: Flip • G: Gear • Space: Fire • C: Physics Debug • V: Pixel Debug • R: Reset
   </div>
 
   <!-- Start Screen -->
@@ -112,6 +112,21 @@
       document.getElementById('startButton').addEventListener('click', () => {
         if (gameStarted) return; // prevent double init
         console.log('🚀 Starting game...');
+        
+        try {
+          // Initialize audio system after user interaction
+          initAudio();
+          
+          // Resume audio context if needed
+          if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+              console.log('🔊 Audio context resumed');
+            });
+          }
+        } catch (error) {
+          console.log('⚠️ Audio setup failed, continuing without sound:', error);
+        }
+        
         document.getElementById('startScreen').style.display = 'none';
         gameStarted = true;
         initializeGame();
@@ -201,9 +216,273 @@
         tracer: null,
         casing: null,
         ju88: null,
+        bf109Left: null,
+        bf109Right: null,
         explosion: null,
-        loaded: { map: false, tileableMap: false, spitfire: false, spitfireInverted: false, spitfireGear: false, spitfireInvertedGear: false, bullet: false, tracer: false, casing: false, ju88: false, explosion: false }
+        loaded: { map: false, tileableMap: false, spitfire: false, spitfireInverted: false, spitfireGear: false, spitfireInvertedGear: false, bullet: false, tracer: false, casing: false, ju88: false, bf109Left: false, bf109Right: false, explosion: false }
       };
+      
+      // Audio system
+      let audioContext = null;
+      const sounds = {
+        gunfire: null,
+        explosion: null,
+        hit: null
+      };
+      
+      // Pixel-perfect collision system
+      const spritePixelData = new Map();
+      
+      function extractSpritePixelData(image, name) {
+        if (!image || !image.complete || image.naturalWidth === 0) return null;
+        
+        // Create a temporary canvas to extract pixel data
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = image.naturalWidth;
+        tempCanvas.height = image.naturalHeight;
+        
+        // Draw the image to extract pixel data
+        tempCtx.drawImage(image, 0, 0);
+        
+        try {
+          const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+          const pixelData = {
+            width: tempCanvas.width,
+            height: tempCanvas.height,
+            data: imageData.data
+          };
+          
+          spritePixelData.set(name, pixelData);
+          console.log(`🎯 Extracted pixel data for ${name}: ${pixelData.width}x${pixelData.height}`);
+          return pixelData;
+        } catch (error) {
+          console.log(`⚠️ Failed to extract pixel data for ${name}:`, error);
+          return null;
+        }
+      }
+      
+      function checkPixelCollision(projX, projY, enemy) {
+        // Get enemy position and rotation
+        const pos = enemy.body.getPosition();
+        const angle = enemy.body.getAngle();
+        
+        // Get sprite and its pixel data based on enemy type
+        let sprite, pixelData, spriteName;
+        if (enemy.type === 'bf109') {
+          // Choose correct BF-109 sprite based on facing direction
+          if (enemy.facingDirection === 'right') {
+            sprite = assets.bf109Right;
+            spriteName = 'bf109Right';
+          } else {
+            sprite = assets.bf109Left;
+            spriteName = 'bf109Left';
+          }
+          pixelData = spritePixelData.get(spriteName);
+        } else {
+          // Ju-88 bomber
+          sprite = assets.ju88;
+          spriteName = 'ju88';
+          pixelData = spritePixelData.get('ju88');
+        }
+        
+        if (!sprite || !pixelData) {
+          // Fallback to distance-based collision if no pixel data
+          const distance = Math.sqrt((projX - pos.x) * (projX - pos.x) + (projY - pos.y) * (projY - pos.y));
+          return distance < (enemy.type === 'bf109' ? 6 : 15); // Smaller collision for fighters
+        }
+        
+        // Calculate sprite dimensions in world space
+        const originalAspectRatio = sprite.naturalWidth / sprite.naturalHeight;
+        let baseEnemySize;
+        if (enemy.type === 'bf109') {
+          baseEnemySize = 8; // Smaller fighters
+        } else {
+          baseEnemySize = 24; // Larger bombers
+        }
+        const enemyWidth = baseEnemySize * originalAspectRatio;
+        const enemyHeight = baseEnemySize;
+        
+        // Transform projectile position to local sprite coordinates
+        // Account for the sprite transformations: translate, rotate, scale(-1, -1)
+        const dx = projX - pos.x;
+        const dy = projY - pos.y;
+        
+        // Reverse rotation (rotate by -angle)
+        const cosA = Math.cos(-angle);
+        const sinA = Math.sin(-angle);
+        const rotatedX = dx * cosA - dy * sinA;
+        const rotatedY = dx * sinA + dy * cosA;
+        
+        // Account for the scale(-1, -1) flip
+        const flippedX = -rotatedX;
+        const flippedY = -rotatedY;
+        
+        // Convert from world coordinates to sprite pixel coordinates
+        // Sprite is rendered from -enemyWidth/2 to +enemyWidth/2, -enemyHeight/2 to +enemyHeight/2
+        const spriteX = (flippedX + enemyWidth / 2) * (pixelData.width / enemyWidth);
+        const spriteY = (flippedY + enemyHeight / 2) * (pixelData.height / enemyHeight);
+        
+        // Check if coordinates are within sprite bounds
+        if (spriteX < 0 || spriteX >= pixelData.width || spriteY < 0 || spriteY >= pixelData.height) {
+          return false;
+        }
+        
+        // Get pixel at the calculated position
+        const pixelIndex = (Math.floor(spriteY) * pixelData.width + Math.floor(spriteX)) * 4;
+        const alpha = pixelData.data[pixelIndex + 3]; // Alpha channel
+        
+        // Consider pixel hit if alpha > threshold (not transparent)
+        return alpha > 50; // Threshold for semi-transparent areas
+      }
+      
+      function checkPlayerPixelCollision(projX, projY) {
+        // Get player position and rotation
+        const pos = aircraft.getPosition();
+        const angle = aircraft.getAngle();
+        
+        // Determine which player sprite to use based on current state
+        let spriteName, sprite;
+        if (game.inverted && game.gearDown) {
+          spriteName = 'spitfireInvertedGear';
+          sprite = assets.spitfireInvertedGear;
+        } else if (game.inverted && !game.gearDown) {
+          spriteName = 'spitfireInverted';
+          sprite = assets.spitfireInverted;
+        } else if (!game.inverted && game.gearDown) {
+          spriteName = 'spitfireGear';
+          sprite = assets.spitfireGear;
+        } else {
+          spriteName = 'spitfire';
+          sprite = assets.spitfire;
+        }
+        
+        const pixelData = spritePixelData.get(spriteName);
+        
+        if (!sprite || !pixelData) {
+          // Fallback to distance-based collision if no pixel data
+          const distance = Math.sqrt((projX - pos.x) * (projX - pos.x) + (projY - pos.y) * (projY - pos.y));
+          return distance < 4; // Smaller than enemy aircraft
+        }
+        
+        // Calculate sprite dimensions in world space (same as player rendering)
+        const basePlayerSize = 0.4; // Same scale factor as in rendering
+        const playerWidth = sprite.naturalWidth * basePlayerSize;
+        const playerHeight = sprite.naturalHeight * basePlayerSize;
+        
+        // Transform projectile position to local sprite coordinates
+        const dx = projX - pos.x;
+        const dy = projY - pos.y;
+        
+        // Reverse rotation (rotate by -angle)
+        const cosA = Math.cos(-angle);
+        const sinA = Math.sin(-angle);
+        const rotatedX = dx * cosA - dy * sinA;
+        const rotatedY = dx * sinA + dy * cosA;
+        
+        // Convert from world coordinates to sprite pixel coordinates
+        // Player sprite is rendered from -w/2 to +w/2, -h/2 to +h/2
+        const spriteX = (rotatedX + playerWidth / 2) * (pixelData.width / playerWidth);
+        const spriteY = (rotatedY + playerHeight / 2) * (pixelData.height / playerHeight);
+        
+        // Check if coordinates are within sprite bounds
+        if (spriteX < 0 || spriteX >= pixelData.width || spriteY < 0 || spriteY >= pixelData.height) {
+          return false;
+        }
+        
+        // Get pixel at the calculated position
+        const pixelIndex = (Math.floor(spriteY) * pixelData.width + Math.floor(spriteX)) * 4;
+        const alpha = pixelData.data[pixelIndex + 3]; // Alpha channel
+        
+        // Consider pixel hit if alpha > threshold (not transparent)
+        return alpha > 50; // Threshold for semi-transparent areas
+      }
+      
+      // Create audio sounds programmatically
+      function createGunfireSound() {
+        const duration = 0.1;
+        const sampleRate = audioContext.sampleRate;
+        const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        for (let i = 0; i < buffer.length; i++) {
+          const t = i / sampleRate;
+          // Sharp crack sound with rapid decay
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 50) * Math.sin(t * 2000 * Math.PI);
+        }
+        
+        return buffer;
+      }
+      
+      function createExplosionSound() {
+        const duration = 1.5;
+        const sampleRate = audioContext.sampleRate;
+        const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        for (let i = 0; i < buffer.length; i++) {
+          const t = i / sampleRate;
+          // Rumbling explosion with bass
+          const noise = Math.random() * 2 - 1;
+          const decay = Math.exp(-t * 2);
+          const lowFreq = Math.sin(t * 100 * Math.PI) * 0.5;
+          const midFreq = Math.sin(t * 500 * Math.PI) * 0.3;
+          data[i] = (noise * 0.7 + lowFreq + midFreq) * decay;
+        }
+        
+        return buffer;
+      }
+      
+      function createHitSound() {
+        const duration = 0.2;
+        const sampleRate = audioContext.sampleRate;
+        const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        for (let i = 0; i < buffer.length; i++) {
+          const t = i / sampleRate;
+          // Sharp metallic impact
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 15) * Math.sin(t * 1500 * Math.PI);
+        }
+        
+        return buffer;
+      }
+      
+      function initAudio() {
+        try {
+          // Create audio context on first call
+          if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.log('🔊 Audio context created');
+          }
+          
+          sounds.gunfire = createGunfireSound();
+          sounds.explosion = createExplosionSound();
+          sounds.hit = createHitSound();
+          console.log('🔊 Audio system initialized');
+        } catch (error) {
+          console.log('⚠️ Audio initialization failed:', error);
+        }
+      }
+      
+      function playSound(soundBuffer, volume = 1.0) {
+        if (!soundBuffer || !audioContext) return;
+        
+        try {
+          const source = audioContext.createBufferSource();
+          const gainNode = audioContext.createGain();
+          
+          source.buffer = soundBuffer;
+          gainNode.gain.value = volume;
+          
+          source.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          source.start();
+        } catch (error) {
+          console.log('⚠️ Sound playback failed:', error);
+        }
+      }
       
       async function loadAssets() {
         console.log('🎮 Starting asset loading...');
@@ -264,6 +543,16 @@
             './assets/sprites/aircraft/enemies/ju-88.png',
             '/assets/sprites/aircraft/enemies/ju-88.png'
           ],
+          bf109Left: [
+            '../assets/sprites/aircraft/enemies/bf-109 facing left.png',
+            './assets/sprites/aircraft/enemies/bf-109 facing left.png',
+            '/assets/sprites/aircraft/enemies/bf-109 facing left.png'
+          ],
+          bf109Right: [
+            '../assets/sprites/aircraft/enemies/bf-109 facing right.png',
+            './assets/sprites/aircraft/enemies/bf-109 facing right.png',
+            '/assets/sprites/aircraft/enemies/bf-109 facing right.png'
+          ],
           explosion: [
             '../assets/sprites/effects/explosion.png',
             './assets/sprites/effects/explosion.png',
@@ -322,6 +611,8 @@
           loadImage('tracer', assetPaths.tracer),
           loadImage('casing', assetPaths.casing),
           loadImage('ju88', assetPaths.ju88),
+            loadImage('bf109Left', assetPaths.bf109Left),
+            loadImage('bf109Right', assetPaths.bf109Right),
           loadImage('explosion', assetPaths.explosion)
         ]);
           console.log('🎉 All assets loaded successfully!');
@@ -346,10 +637,52 @@
           console.log('🎮 Game will continue with fallback graphics');
           console.log('📊 Asset load status after error:', assets.loaded);
         }
+        
+        // Initialize audio system (moved to user interaction)
+        // initAudio();
+        
+        // Extract pixel data for all aircraft sprites
+        if (assets.loaded.ju88 && assets.ju88) {
+          extractSpritePixelData(assets.ju88, 'ju88');
+        }
+        if (assets.loaded.bf109Left && assets.bf109Left) {
+          extractSpritePixelData(assets.bf109Left, 'bf109Left');
+        }
+        if (assets.loaded.bf109Right && assets.bf109Right) {
+          extractSpritePixelData(assets.bf109Right, 'bf109Right');
+        }
+        if (assets.loaded.spitfire && assets.spitfire) {
+          extractSpritePixelData(assets.spitfire, 'spitfire');
+        }
+        if (assets.loaded.spitfireInverted && assets.spitfireInverted) {
+          extractSpritePixelData(assets.spitfireInverted, 'spitfireInverted');
+        }
+        if (assets.loaded.spitfireGear && assets.spitfireGear) {
+          extractSpritePixelData(assets.spitfireGear, 'spitfireGear');
+        }
+        if (assets.loaded.spitfireInvertedGear && assets.spitfireInvertedGear) {
+          extractSpritePixelData(assets.spitfireInvertedGear, 'spitfireInvertedGear');
+        }
       }
       
       // Start loading assets
       loadAssets();
+      
+      // Debug: Check asset loading status immediately
+      console.log('🔍 Assets object at startup:', assets);
+      console.log('🔍 Asset loaded status:', assets.loaded);
+      
+      // Check asset loading status after a delay
+      setTimeout(() => {
+        console.log('📊 Asset status after 2 seconds:', {
+          loaded: assets.loaded,
+          hasImages: {
+            map: !!assets.map,
+            spitfire: !!assets.spitfire,
+            ju88: !!assets.ju88
+          }
+        });
+      }, 2000);
       
       // Debug: Log initial game state
       setTimeout(() => {
@@ -369,13 +702,17 @@
         throttle: 0.4,
         keys: new Set(),
         showCollision: false,
+        showPixelCollision: false,
         crashed: false,
         inverted: false,
         gearDown: false,
+        onGround: false, // Track if aircraft is on ground
+        groundSpeed: 0, // Track ground speed for takeoff/landing
         projectiles: [], // bullets and tracers
         casings: [], // ejected shells
         enemies: [], // enemy aircraft
-        explosions: [] // explosion effects
+        explosions: [], // explosion effects
+        enemyProjectiles: [] // enemy bullets
       };
       
       // =============================================================================
@@ -387,14 +724,20 @@
         game.keys.add(key);
         console.log('🎯 Key pressed:', key); // Debug key presses
         
-        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c','f','g',' '].includes(key)) {
+        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c','v','f','g',' '].includes(key)) {
           e.preventDefault();
         }
         
         // Toggle collision debug view
         if (key === 'c') {
           game.showCollision = !game.showCollision;
-          console.log('🔍 Collision debug:', game.showCollision ? 'ON' : 'OFF');
+          console.log('🔍 Physics collision debug:', game.showCollision ? 'ON' : 'OFF');
+        }
+        
+        // Toggle pixel collision debug view
+        if (key === 'v') {
+          game.showPixelCollision = !game.showPixelCollision;
+          console.log('🎯 Pixel collision debug:', game.showPixelCollision ? 'ON' : 'OFF');
         }
         
         // Toggle inverted flight mode
@@ -520,9 +863,9 @@
         }
         
         function spawnEnemyFormation() {
-          console.log('✈️ Spawning new enemy formation...');
+          console.log('✈️ Spawning new enemy formation with escorts...');
           
-          const enemyAltitude = -500; // 1000m above ground in physics units (500 * VISUAL_SCALE = 1000m)
+          const bomberAltitude = -500; // 1000m above ground in physics units (500 * VISUAL_SCALE = 1000m)
           const vSpacing = 100; // 200m between aircraft in V formation
           const vOffset = 50; // 100m vertical offset for V wings
           
@@ -531,9 +874,9 @@
           
           // Add some random altitude variation
           const altitudeVariation = (Math.random() - 0.5) * 200; // ±200m variation
-          const baseAltitude = enemyAltitude + altitudeVariation;
+          const baseAltitude = bomberAltitude + altitudeVariation;
           
-          // Create V formation of 3 aircraft
+          // Create V formation of 3 ju-88 bombers
           for (let pos = 0; pos < 3; pos++) {
             let x, y;
             
@@ -561,25 +904,29 @@
             });
             
             enemyBody.createFixture({
-              shape: pl.Box(12, 8), // Much larger Ju-88 bomber (24m x 16m - much taller)
+              shape: pl.Box(12, 8), // Larger Ju-88 bomber (24m x 16m - 2x larger to match visual size)
               density: 25,
               friction: 0.3,
               restitution: 0.1
             });
             
-            // Enemy data
+            // Enemy data with reduced health for faster damage
             const enemy = {
               body: enemyBody,
-              health: 10,
-              maxHealth: 10,
+              health: 5, // Reduced from 10 for faster damage
+              maxHealth: 5,
               targetSpeed: 80,
               destroyed: false,
-              thrustDisabled: false,
-              liftDisabled: false,
+              thrustReduction: 0, // Progressive thrust loss (0-1)
+              liftReduction: 0, // Progressive lift loss (0-1)
               type: 'ju88',
               formation: formationCounter,
               position: pos,
-              spawnTime: performance.now()
+              spawnTime: performance.now(),
+              targetAltitude: y, // Store initial altitude to maintain level flight
+              smoking: false, // Visual damage indicator
+              onFire: false, // Critical damage indicator
+              pitchingDown: false // Crash state
             };
             
             // Store reference for collision detection
@@ -587,6 +934,65 @@
             
             game.enemies.push(enemy);
             console.log(`✈️ Spawned Ju-88 bomber at (${x}, ${y}) - Formation ${formationCounter}, Position ${pos}`);
+          }
+          
+          // Add bf-109 escort fighters
+          const escortAltitude = baseAltitude - 25; // Fighters fly slightly lower
+          const escortOffset = 150; // Distance from bombers
+          
+          // Create 2-4 bf-109 escorts per formation
+          const numEscorts = 2 + Math.floor(Math.random() * 3); // 2-4 escorts
+          for (let i = 0; i < numEscorts; i++) {
+            // Position escorts around the bomber formation
+            const escortX = spawnX + (i % 2 === 0 ? -escortOffset : escortOffset) + (Math.random() - 0.5) * 50;
+            const escortY = escortAltitude + (Math.floor(i / 2) * 30) + (Math.random() - 0.5) * 20;
+            
+            // Create Box2D body for escort fighter
+            const escortBody = world.createBody({
+              type: 'dynamic',
+              position: pl.Vec2(escortX, escortY),
+              angle: Math.PI, // Face left initially
+              linearDamping: 0.02,
+              angularDamping: 2.0
+            });
+            
+            escortBody.createFixture({
+              shape: pl.Box(3, 1), // Smaller fighter (6m x 2m)
+              density: 15,
+              friction: 0.3,
+              restitution: 0.1
+            });
+            
+            // BF-109 escort data
+            const escort = {
+              body: escortBody,
+              health: 3, // Lower health than bombers
+              maxHealth: 3,
+              targetSpeed: 120, // Faster than bombers
+              destroyed: false,
+              thrustReduction: 0,
+              liftReduction: 0,
+              type: 'bf109',
+              formation: formationCounter,
+              position: i,
+              spawnTime: performance.now(),
+              targetAltitude: escortY,
+              smoking: false,
+              onFire: false,
+              pitchingDown: false,
+              // Combat AI state
+              mode: 'escort', // escort, chase, attack
+              target: null, // Target for attack
+              lastShotTime: 0,
+              shotInterval: 200 + Math.random() * 300, // 200-500ms between shots
+              facingDirection: 'left' // Track which sprite to use
+            };
+            
+            // Store reference for collision detection
+            escortBody.setUserData({ type: 'enemy', enemy: escort });
+            
+            game.enemies.push(escort);
+            console.log(`🛩️ Spawned BF-109 escort at (${escortX}, ${escortY}) - Formation ${formationCounter}, Position ${i}`);
           }
           
           formationCounter++;
@@ -599,42 +1005,65 @@
             lastSpawnTime = now;
           }
           
-          // Clean up enemies that are too far from the player
+          // Clean up enemies that are too far from the player or have crashed
           const playerPos = aircraft.getPosition();
           const maxDistance = 5000; // 10000m from player (really far)
           
           for (let i = game.enemies.length - 1; i >= 0; i--) {
             const enemy = game.enemies[i];
-            if (!enemy.destroyed) {
               const pos = enemy.body.getPosition();
+            
+            // Remove if too far from player
               const distance = Math.sqrt(
                 (pos.x - playerPos.x) * (pos.x - playerPos.x) + 
                 (pos.y - playerPos.y) * (pos.y - playerPos.y)
               );
               
-              if (distance > maxDistance) {
+            // Remove if crashed into ground or too far away
+            const hasHitGround = pos.y > 5; // Below ground level
+            const tooFarAway = distance > maxDistance;
+            
+            if (!enemy.destroyed && tooFarAway) {
                 console.log(`🗑️ Removing enemy too far from player (distance: ${distance * VISUAL_SCALE}m)`);
                 world.destroyBody(enemy.body);
                 game.enemies.splice(i, 1);
-              }
+            } else if (enemy.destroyed && hasHitGround) {
+              console.log(`💥 Removing crashed enemy`);
+              world.destroyBody(enemy.body);
+              game.enemies.splice(i, 1);
+              
+              // Create ground explosion
+              game.explosions.push({
+                x: pos.x,
+                y: 0, // Ground level
+                time: 0,
+                duration: 1.5,
+                size: 25,
+                type: 'destruction'
+              });
+              playSound(sounds.explosion, 0.6);
             }
           }
         }
         
         function updateEnemies(dt) {
           game.enemies.forEach(enemy => {
-            if (enemy.destroyed) return;
+            if (enemy.destroyed && !enemy.pitchingDown) return; // Allow crashing aircraft to continue updating
             
             const pos = enemy.body.getPosition();
             const vel = enemy.body.getLinearVelocity();
             const angle = enemy.body.getAngle();
             const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
             
+            // AI behavior handled below for all enemy types
+            
             // Use same physics as player aircraft but with AI controls
             
-            // Thrust (same calculation as player)
-            if (!enemy.thrustDisabled) {
-              let maxThrust = 100000; // Same base thrust as player
+            // Progressive thrust reduction based on damage
+            let maxThrust = 30000; // Base thrust for heavy bomber
+            
+            // Apply progressive damage reduction
+            maxThrust *= (1 - enemy.thrustReduction);
               
               // Apply altitude-based thrust reduction (same as player)
               const visualAltitude = -pos.y * VISUAL_SCALE;
@@ -643,12 +1072,11 @@
                 maxThrust *= altitudeReduction;
               }
               
-              const thrust = 0.8 * maxThrust; // 80% throttle for cruise
+            const thrust = 0.5 * maxThrust; // 50% throttle for slower cruise
               const thrustForce = pl.Vec2(Math.cos(angle) * thrust, Math.sin(angle) * thrust);
               enemy.body.applyForceToCenter(thrustForce, true);
-            }
             
-            // Aerodynamics (same as player but larger wing area)
+            // Aerodynamics (enhanced for level flight)
             if (speed > 1) {
               const q = 0.5 * 1.225 * speed * speed; // Dynamic pressure
               const wingArea = 60; // Larger wing area for heavy bomber (48m wingspan)
@@ -657,8 +1085,14 @@
               const velocityAngle = Math.atan2(vel.y, vel.x);
               const aoa = angle - velocityAngle;
               
-              // Lift coefficient (same as player)
+              // Enhanced lift coefficient for stable level flight
               let liftCoeff = Math.sin(aoa * 2) * 1.5;
+              
+              // Add minimum lift to counteract gravity for level flight
+              const minLiftForLevelFlight = 1.2; // Higher minimum lift coefficient
+              if (Math.abs(liftCoeff) < minLiftForLevelFlight) {
+                liftCoeff = Math.sign(liftCoeff || 1) * minLiftForLevelFlight;
+              }
               
               // Apply altitude-based lift reduction (same as player)
               const visualAltitude = -pos.y * VISUAL_SCALE;
@@ -667,13 +1101,15 @@
                 liftCoeff *= altitudeReduction;
               }
               
-              // Apply lift perpendicular to velocity
-              if (!enemy.liftDisabled) {
-                const lift = q * wingArea * liftCoeff;
+              // Apply lift with progressive damage reduction
+              const lift = q * wingArea * liftCoeff * (1 - enemy.liftReduction);
                 const liftAngle = velocityAngle + Math.PI/2;
                 const liftForce = pl.Vec2(Math.cos(liftAngle) * lift, Math.sin(liftAngle) * lift);
                 enemy.body.applyForceToCenter(liftForce, true);
-              }
+              
+              // Additional upward force to counteract gravity (reduced by damage)
+              const gravityCounterForce = enemy.body.getMass() * 9.81 * 0.8 * (1 - enemy.liftReduction * 0.5);
+              enemy.body.applyForceToCenter(pl.Vec2(0, -gravityCounterForce), true);
               
               // Drag (same as player)
               const dragCoeff = 0.01 + Math.abs(liftCoeff) * 0.01;
@@ -682,8 +1118,21 @@
               enemy.body.applyForceToCenter(dragForce, true);
             }
             
-            // Simple AI: Keep wings level and nose pointing left
-            const targetAngle = Math.PI; // Fly left (180 degrees)
+            // Enhanced AI: Maintain altitude and heading (unless pitching down to crash)
+            if (!enemy.pitchingDown) {
+              // Normal flight: Altitude control - maintain level flight
+              const altitudeError = pos.y - enemy.targetAltitude;
+              
+              // Calculate desired pitch based on altitude error
+              let desiredPitch = 0.1; // Stronger upward pitch for level flight (5.7 degrees)
+              if (Math.abs(altitudeError) > 2.5) { // 5m deadband in visual altitude
+                // Pitch up if too low, pitch down if too high
+                const pitchCorrection = -Math.sign(altitudeError) * Math.min(Math.abs(altitudeError) * 0.05, 0.25); // Stronger correction
+                desiredPitch += pitchCorrection;
+              }
+              
+              // Combine with left-facing heading
+              const targetAngle = Math.PI + desiredPitch; // Fly left with pitch adjustment
             const angleDiff = targetAngle - angle;
             
             // Normalize angle difference to [-π, π]
@@ -691,10 +1140,15 @@
             while (normalizedAngleDiff > Math.PI) normalizedAngleDiff -= 2 * Math.PI;
             while (normalizedAngleDiff < -Math.PI) normalizedAngleDiff += 2 * Math.PI;
             
-            // Apply gentle correction torque to maintain leftward flight
-            if (Math.abs(normalizedAngleDiff) > 0.1) { // 5 degree deadband
-              const correctionTorque = normalizedAngleDiff * 15000; // Gentle correction
+              // Apply correction torque to maintain target angle (heading + altitude)
+              if (Math.abs(normalizedAngleDiff) > 0.02) { // 1.1 degree deadband for precise control
+                const correctionTorque = normalizedAngleDiff * 40000; // Much stronger correction for altitude control
               enemy.body.applyTorque(correctionTorque, true);
+              }
+            } else {
+              // Crashing: Force nose down and lose control
+              const crashTorque = 30000; // Continuous downward pitch
+              enemy.body.applyTorque(crashTorque, true);
             }
           });
         }
@@ -703,15 +1157,22 @@
           game.enemies.forEach(enemy => {
             if (enemy.destroyed) return;
             
-            const pos = enemy.body.getPosition();
-            const distance = Math.sqrt(
-              (proj.x - pos.x) * (proj.x - pos.x) + 
-              (proj.y - pos.y) * (proj.y - pos.y)
-            );
-            
-            // Simple collision detection - within 15 physics units (30m) for larger bombers
-            if (distance < 15) {
-              console.log('💥 Projectile hit enemy!', { distance, enemyHealth: enemy.health });
+            // Pixel-perfect collision detection
+            if (checkPixelCollision(proj.x, proj.y, enemy)) {
+              console.log('🎯 Pixel-perfect hit detected!', { projectilePos: { x: proj.x, y: proj.y }, enemyHealth: enemy.health });
+              
+              // Create small hit explosion effect
+              game.explosions.push({
+                x: proj.x,
+                y: proj.y,
+                time: 0,
+                duration: 0.3, // Short hit explosion
+                size: 3, // Small hit explosion (6m diameter)
+                type: 'hit' // Mark as hit explosion for different rendering
+              });
+              
+              // Play hit sound effect
+              playSound(sounds.hit, 0.2);
               
               // Damage enemy
               enemy.health--;
@@ -719,36 +1180,81 @@
               // Remove projectile
               game.projectiles.splice(projIndex, 1);
               
-              // Check if enemy is destroyed
+              // Progressive damage system with realistic crash physics
               if (enemy.health <= 0 && !enemy.destroyed) {
-                destroyEnemy(enemy);
-              } else if (enemy.health <= 5 && !enemy.thrustDisabled) {
-                // Disable thrust when heavily damaged
-                enemy.thrustDisabled = true;
-                console.log('⚠️ Enemy thrust disabled');
-              } else if (enemy.health <= 3 && !enemy.liftDisabled) {
-                // Disable lift when critically damaged
-                enemy.liftDisabled = true;
-                console.log('⚠️ Enemy lift disabled');
+                enemy.destroyed = true;
+                enemy.thrustReduction = 1.0; // Complete thrust loss
+                enemy.liftReduction = 1.0; // Complete lift loss
+                enemy.onFire = true;
+                enemy.pitchingDown = true; // Mark for pitch down behavior
+                console.log('💥 Enemy critically damaged - pitching down to crash');
+                
+                // Force nose down and disable altitude control
+                const crashTorque = 50000; // Strong downward pitch force
+                enemy.body.applyTorque(crashTorque, true);
+              } else {
+                              // Progressive damage based on remaining health and aircraft type
+              const damageRatio = 1 - (enemy.health / enemy.maxHealth);
+              
+              if (enemy.type === 'bf109') {
+                // BF-109 damage thresholds (lower health)
+                if (enemy.health <= 2) {
+                  enemy.thrustReduction = Math.min(0.7, damageRatio * 1.0);
+                  if (!enemy.smoking) {
+                    enemy.smoking = true;
+                    console.log('💨 BF-109 engine smoking');
+                  }
+                }
+                
+                if (enemy.health <= 1) {
+                  enemy.liftReduction = Math.min(0.5, damageRatio * 0.6);
+                  if (!enemy.onFire) {
+                    enemy.onFire = true;
+                    console.log('🔥 BF-109 on fire - losing control');
+                  }
+                }
+              } else {
+                // Ju-88 damage thresholds (higher health)
+                if (enemy.health <= 3) {
+                  enemy.thrustReduction = Math.min(0.8, damageRatio * 1.2);
+                  if (!enemy.smoking) {
+                    enemy.smoking = true;
+                    console.log('💨 Ju-88 engine smoking');
+                  }
+                }
+                
+                if (enemy.health <= 2) {
+                  enemy.liftReduction = Math.min(0.6, damageRatio * 0.8);
+                  if (!enemy.onFire) {
+                    enemy.onFire = true;
+                    console.log('🔥 Ju-88 on fire - losing lift');
+                  }
+                }
+              }
               }
             }
           });
         }
         
         function destroyEnemy(enemy) {
-          console.log('💥 Enemy destroyed!');
+          // This function is now only called for ground impact destruction
+          console.log('💥 Enemy destroyed by ground impact!');
           enemy.destroyed = true;
           
           const pos = enemy.body.getPosition();
           
-          // Create explosion effect
+          // Create destruction explosion effect only for ground impact
           game.explosions.push({
             x: pos.x,
             y: pos.y,
             time: 0,
             duration: 1.0, // 1 second explosion
-            size: 20 // 40m explosion diameter
+            size: 20, // 40m explosion diameter
+            type: 'destruction' // Mark as destruction explosion
           });
+          
+          // Play explosion sound effect
+          playSound(sounds.explosion, 0.5);
           
           // Remove body from physics world
           world.destroyBody(enemy.body);
@@ -764,6 +1270,32 @@
             }
           }
         }
+      
+      function checkEnemyProjectilePlayerCollision(proj, projIndex) {
+        // Check if enemy bullet hits player
+        if (checkPlayerPixelCollision(proj.x, proj.y)) {
+          console.log('💥 Player hit by enemy fire!');
+          
+          // Create hit explosion effect
+          game.explosions.push({
+            x: proj.x,
+            y: proj.y,
+            time: 0,
+            duration: 0.2,
+            size: 2,
+            type: 'hit'
+          });
+          
+          // Play hit sound
+          playSound(sounds.hit, 0.3);
+          
+          // Remove projectile
+          game.enemyProjectiles.splice(projIndex, 1);
+          
+          // TODO: Add player damage system here
+          console.log('⚠️ Player damage system not implemented yet');
+        }
+      }
       
       function trySpawnGuns() {
         console.log('🔫 trySpawnGuns called');
@@ -828,13 +1360,16 @@
           life: 10.0 // Casings last longer
         });
         
+        // Play gunfire sound effect
+        playSound(sounds.gunfire, 0.3);
+        
         console.log('🔫 Fired guns! Projectiles:', game.projectiles.length, 'Casings:', game.casings.length);
         console.log('🎯 Latest projectile:', game.projectiles[game.projectiles.length - 1]);
         console.log('🎯 Latest casing:', game.casings[game.casings.length - 1]);
       }
       
       function updateProjectiles(dt) {
-        // Update bullets and tracers
+        // Update player bullets and tracers
         for (let i = game.projectiles.length - 1; i >= 0; i--) {
           const proj = game.projectiles[i];
           
@@ -861,6 +1396,38 @@
           // Remove if expired
           if (proj.life <= 0) {
             game.projectiles.splice(i, 1);
+          }
+        }
+        
+        // Update enemy projectiles
+        if (game.enemyProjectiles) {
+          for (let i = game.enemyProjectiles.length - 1; i >= 0; i--) {
+            const proj = game.enemyProjectiles[i];
+            
+            // Check collision with player
+            checkEnemyProjectilePlayerCollision(proj, i);
+            
+            // Apply drag
+            const speed = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy);
+            const dragCoeff = 0.02;
+            const drag = dragCoeff * speed;
+            
+            if (speed > 0) {
+              proj.vx -= (proj.vx / speed) * drag * dt;
+              proj.vy -= (proj.vy / speed) * drag * dt;
+            }
+            
+            // Update position
+            proj.x += proj.vx * dt;
+            proj.y += proj.vy * dt;
+            
+            // Decrease life
+            proj.life -= dt;
+            
+            // Remove if expired
+            if (proj.life <= 0) {
+              game.enemyProjectiles.splice(i, 1);
+            }
           }
         }
         
@@ -900,48 +1467,52 @@
         const bodyA = contact.getFixtureA().getBody();
         const bodyB = contact.getFixtureB().getBody();
         
-        // Check if aircraft hit ground
+        // Enhanced ground collision for realistic landing/takeoff
         if ((bodyA === aircraft || bodyB === aircraft)) {
           const vel = aircraft.getLinearVelocity();
-          const verticalSpeed = Math.abs(vel.y); // Vertical component only
+          const verticalSpeed = Math.abs(vel.y);
+          const horizontalSpeed = Math.abs(vel.x);
           const totalSpeed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
           
-          console.log(`🛬 Ground contact - Vertical: ${verticalSpeed.toFixed(1)} m/s, Total: ${totalSpeed.toFixed(1)} m/s, Gear: ${game.gearDown ? 'DOWN' : 'UP'}`);
+          game.onGround = true;
+          game.groundSpeed = horizontalSpeed;
           
-          // Define crash threshold for vertical speed
-          const crashThreshold = 8.0; // m/s vertical speed threshold
-          const hardLandingThreshold = 4.0; // m/s for speed reduction without gear
+          console.log(`🛬 Ground contact - Vertical: ${verticalSpeed.toFixed(1)} m/s, Horizontal: ${horizontalSpeed.toFixed(1)} m/s, Gear: ${game.gearDown ? 'DOWN' : 'UP'}`);
+          
+          // Improved landing physics
+          const crashThreshold = game.gearDown ? 10.0 : 6.0; // Higher tolerance with gear
+          const hardLandingThreshold = game.gearDown ? 6.0 : 3.0;
           
           if (verticalSpeed > crashThreshold) {
-            // High vertical speed = crash regardless of gear
+            // High vertical speed = crash
             game.crashed = true;
             console.log('💥 CRASHED! Vertical speed too high:', verticalSpeed.toFixed(1), 'm/s');
             aircraft.setLinearVelocity(pl.Vec2(0, 0));
             aircraft.setAngularVelocity(0);
-          } else if (!game.gearDown && verticalSpeed > hardLandingThreshold) {
-            // Hard landing without gear = lose speed but don't crash
-            console.log('⚠️ Hard landing without gear! Losing speed...');
-            const speedReduction = 0.3; // Reduce speed by 70%
+          } else if (verticalSpeed > hardLandingThreshold) {
+            // Hard landing
+            const gearProtection = game.gearDown ? 0.7 : 0.3; // Gear absorbs impact
+            console.log(game.gearDown ? '⚠️ Hard landing with gear!' : '⚠️ Hard landing without gear!');
+            
+            // Apply ground friction and impact absorption
+            const frictionCoeff = game.gearDown ? 0.95 : 0.85; // Gear has better braking
             aircraft.setLinearVelocity(pl.Vec2(
-              vel.x * speedReduction,
-              vel.y * speedReduction
+              vel.x * frictionCoeff * gearProtection,
+              Math.min(vel.y * 0.1, 0) // Absorb vertical impact
             ));
-            // Add some bounce/instability
-            aircraft.setAngularVelocity(aircraft.getAngularVelocity() + (Math.random() - 0.5) * 2);
-          } else if (game.gearDown) {
-            // Safe landing with gear down
-            console.log('✅ Safe landing with gear down!');
-            // Gentle speed reduction for realistic landing
-            aircraft.setLinearVelocity(pl.Vec2(
-              vel.x * 0.8,
-              Math.min(vel.y, 0) // Stop downward motion
-            ));
+            
+            // Add instability for gear-up landings
+            if (!game.gearDown) {
+              aircraft.setAngularVelocity(aircraft.getAngularVelocity() + (Math.random() - 0.5) * 3);
+            }
           } else {
-            // Low speed ground contact without gear (gentle bump)
-            console.log('🟡 Gentle ground contact');
+            // Smooth landing
+            const friction = game.gearDown ? 0.98 : 0.92; // Gear provides better control
+            console.log(game.gearDown ? '✅ Smooth landing with gear!' : '🟡 Belly landing');
+            
             aircraft.setLinearVelocity(pl.Vec2(
-              vel.x * 0.9,
-              Math.min(vel.y, 0)
+              vel.x * friction,
+              Math.min(vel.y * 0.05, 0) // Gentle touchdown
             ));
           }
         }
@@ -989,6 +1560,26 @@
               }
             }
           }
+        }
+      });
+      
+      // Add ground contact end detection for takeoff
+      world.on('end-contact', (contact) => {
+        const bodyA = contact.getFixtureA().getBody();
+        const bodyB = contact.getFixtureB().getBody();
+        
+        // Check if aircraft left ground
+        if ((bodyA === aircraft || bodyB === aircraft)) {
+          // Small delay to ensure we're actually airborne
+          setTimeout(() => {
+            const pos = aircraft.getPosition();
+            const groundClearance = -pos.y; // Distance above ground
+            if (groundClearance > 2) { // 4m clearance before considering truly airborne
+              game.onGround = false;
+              game.groundSpeed = 0;
+              console.log('🛫 Aircraft airborne');
+            }
+          }, 100);
         }
       });
       
@@ -1067,8 +1658,18 @@
           trySpawnGuns();
         }
         
-        // Thrust - Further increased for higher top speeds with altitude reduction
-        let maxThrust = 300000; // Massively increased to overcome speed limits
+        // Enhanced thrust system with ground effects
+        let maxThrust = 300000; // Base thrust
+        
+        // Ground effect: slightly reduced thrust efficiency on ground
+        if (game.onGround) {
+          maxThrust *= 0.95; // 5% reduction on ground due to prop wash
+        }
+        
+        // Gear drag: landing gear creates extra drag
+        if (game.gearDown) {
+          maxThrust *= 0.9; // 10% thrust reduction with gear down
+        }
         
         // Altitude-based thrust reduction (same as lift)
         const visualAltitude = -pos.y * VISUAL_SCALE; // Convert to visual altitude
@@ -1080,6 +1681,11 @@
             const reductionFactor = 1 - ((visualAltitude - 5000) / 250);
             maxThrust *= reductionFactor;
           }
+        }
+        
+        // Ground roll physics for takeoff
+        if (game.onGround && game.groundSpeed < 25) { // Below takeoff speed
+          maxThrust *= 1.1; // Extra thrust for ground roll
         }
         
         const thrust = game.throttle * maxThrust;
@@ -1101,16 +1707,27 @@
           console.log(`⚡ Breaking speed cap: ${(currentSpeed * VISUAL_SCALE).toFixed(0)} → ${(targetSpeed * VISUAL_SCALE).toFixed(0)} m/s`);
         }
         
-        // Simple aerodynamics
+        // Enhanced aerodynamics with ground effects and gear effects
         if (speed > 1) {
           const airDensity = 1.225;
-          const wingArea = 20;
+          let wingArea = 20;
+          
+          // Ground effect: increased lift near ground
+          if (game.onGround || -pos.y < 5) { // Within 10m of ground
+            wingArea *= 1.15; // 15% more effective wing area in ground effect
+          }
+          
           const q = 0.5 * airDensity * speed * speed;
           
           // Lift (simplified) with altitude-based reduction
           const velAngle = Math.atan2(vel.y, vel.x);
           const aoa = angle - velAngle;
           let liftCoeff = Math.sin(aoa * 2) * 1.5;
+          
+          // Gear effects on lift
+          if (game.gearDown) {
+            liftCoeff *= 0.9; // Gear creates some disruption to airflow
+          }
           
           // Altitude-based lift reduction (physics units, converted to visual for calculation)
           const visualAltitude = -pos.y * VISUAL_SCALE; // Convert to visual altitude
@@ -1375,7 +1992,7 @@
         
         // Render enemies
         game.enemies.forEach(enemy => {
-          if (enemy.destroyed) return;
+          if (enemy.destroyed && !enemy.pitchingDown) return;
           
           const pos = enemy.body.getPosition();
           const angle = enemy.body.getAngle();
@@ -1383,25 +2000,112 @@
           
           ctx.save();
           ctx.translate(screenPos.x, screenPos.y);
-          // Just rotate by angle, no flipping needed
-          ctx.rotate(angle);
           
-          // Enemy aircraft size (Ju-88 heavy bomber - much larger and much taller)
-          const enemyWidth = 24 * SCALE * game.camera.zoom; // 48m wingspan (2x larger)
-          const enemyHeight = 16 * SCALE * game.camera.zoom; // 32m length (very tall, chunky bomber)
-          
-          if (assets.loaded.ju88 && assets.ju88) {
-            // Use Ju-88 sprite without any flips
-            ctx.drawImage(assets.ju88, -enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
-          } else {
-            // Fallback enemy - dark grey bomber
-            ctx.fillStyle = enemy.health <= 5 ? '#8B0000' : '#444444'; // Red if heavily damaged
-            ctx.fillRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+          if (enemy.type === 'bf109') {
+            // BF-109 rendering
+            ctx.rotate(angle);
             
-            // Wing outline
-            ctx.strokeStyle = '#222222';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+            const baseSize = 8 * SCALE * game.camera.zoom; // Smaller fighters
+            let sprite = null;
+            let spriteLoaded = false;
+            
+            // Choose correct sprite based on facing direction
+            if (enemy.facingDirection === 'right') {
+              sprite = assets.bf109Right;
+              spriteLoaded = assets.loaded.bf109Right;
+            } else {
+              sprite = assets.bf109Left;
+              spriteLoaded = assets.loaded.bf109Left;
+            }
+            
+            if (spriteLoaded && sprite) {
+              const aspectRatio = sprite.naturalWidth / sprite.naturalHeight;
+              const width = baseSize * aspectRatio;
+              const height = baseSize;
+              ctx.drawImage(sprite, -width/2, -height/2, width, height);
+            } else {
+              // Fallback BF-109 - smaller grey fighter
+              let baseColor = '#666666';
+              if (enemy.onFire) baseColor = '#8B0000';
+              else if (enemy.smoking) baseColor = '#808080';
+              
+              ctx.fillStyle = baseColor;
+              const width = baseSize * 1.5; // Fighter aspect ratio
+              const height = baseSize;
+              ctx.fillRect(-width/2, -height/2, width, height);
+              
+              // Fighter outline
+              ctx.strokeStyle = '#333333';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(-width/2, -height/2, width, height);
+            }
+          } else {
+            // Ju-88 rendering (existing code)
+            ctx.rotate(angle);
+            
+            const originalAspectRatio = assets.loaded.ju88 && assets.ju88 ? assets.ju88.naturalWidth / assets.ju88.naturalHeight : 1.5;
+            const baseEnemySize = 24 * SCALE * game.camera.zoom;
+            const enemyWidth = baseEnemySize * originalAspectRatio;
+            const enemyHeight = baseEnemySize;
+            
+            if (assets.loaded.ju88 && assets.ju88) {
+              ctx.scale(-1, -1); // Flip for ju-88
+              ctx.drawImage(assets.ju88, -enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+            } else {
+              // Fallback bomber
+              let baseColor = '#444444';
+              if (enemy.onFire) baseColor = '#8B0000';
+              else if (enemy.smoking) baseColor = '#696969';
+              
+              ctx.fillStyle = baseColor;
+              ctx.fillRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+              
+              ctx.strokeStyle = '#222222';
+              ctx.lineWidth = 2;
+              ctx.strokeRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+            }
+          }
+          
+          // Add visual damage effects
+          if (enemy.smoking || enemy.onFire) {
+            // Determine effect size based on aircraft type
+            let effectSize;
+            if (enemy.type === 'bf109') {
+              effectSize = 8 * SCALE * game.camera.zoom * 0.3; // Smaller effects for fighters
+            } else {
+              effectSize = (24 * SCALE * game.camera.zoom * (assets.loaded.ju88 ? assets.ju88.naturalWidth / assets.ju88.naturalHeight : 1.5)) * 0.3;
+            }
+            
+            const effectX = Math.random() * effectSize * 0.8 - effectSize * 0.4;
+            const effectY = -effectSize * 0.3 + Math.random() * effectSize * 0.2;
+            
+            if (enemy.onFire) {
+              // Fire effect - orange/red particles
+              const numParticles = enemy.type === 'bf109' ? 2 : 3;
+              for (let i = 0; i < numParticles; i++) {
+                const fireX = effectX + (Math.random() - 0.5) * effectSize;
+                const fireY = effectY + (Math.random() - 0.5) * effectSize * 0.5;
+                const fireSize = effectSize * 0.2 * Math.random();
+                
+                ctx.fillStyle = i % 2 === 0 ? '#FF4500' : '#FF8C00';
+                ctx.beginPath();
+                ctx.arc(fireX, fireY, fireSize, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            } else if (enemy.smoking) {
+              // Smoke effect - grey particles
+              const numParticles = enemy.type === 'bf109' ? 1 : 2;
+              for (let i = 0; i < numParticles; i++) {
+                const smokeX = effectX + (Math.random() - 0.5) * effectSize;
+                const smokeY = effectY + (Math.random() - 0.5) * effectSize * 0.5;
+                const smokeSize = effectSize * 0.15 * Math.random();
+                
+                ctx.fillStyle = `rgba(105, 105, 105, ${0.4 + Math.random() * 0.3})`;
+                ctx.beginPath();
+                ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
           }
           
           // Health bar removed - keeping invisible as requested
@@ -1421,25 +2125,68 @@
           ctx.restore();
         });
         
+        // Render enemy projectiles
+        if (game.enemyProjectiles) {
+          game.enemyProjectiles.forEach(proj => {
+            const screenPos = worldToScreen(proj.x, proj.y);
+            const speed = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy);
+            const angle = Math.atan2(proj.vy, proj.vx);
+            
+            ctx.save();
+            ctx.translate(screenPos.x, screenPos.y);
+            ctx.rotate(angle);
+            
+            // Enemy bullets - red colored
+            const bulletSize = 3 * SCALE * game.camera.zoom;
+            ctx.fillStyle = '#FF4444'; // Red enemy bullets
+            ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
+            
+            ctx.restore();
+          });
+        }
+        
         // Render explosions
         game.explosions.forEach(explosion => {
           const screenPos = worldToScreen(explosion.x, explosion.y);
           const progress = explosion.time / explosion.duration;
-          const size = explosion.size * SCALE * game.camera.zoom * (1 + progress * 2); // Expand over time
+          const isHitExplosion = explosion.type === 'hit';
+          
+          let size;
+          if (isHitExplosion) {
+            // Hit explosions stay small and flash bright
+            size = explosion.size * SCALE * game.camera.zoom * (1 + progress * 0.5);
+          } else {
+            // Destruction explosions expand dramatically
+            size = explosion.size * SCALE * game.camera.zoom * (1 + progress * 2);
+          }
+          
           const alpha = 1 - progress; // Fade out
           
           ctx.save();
           ctx.translate(screenPos.x, screenPos.y);
           
-          if (assets.loaded.explosion && assets.explosion) {
-            // Use explosion sprite
+          if (assets.loaded.explosion && assets.explosion && !isHitExplosion) {
+            // Use explosion sprite only for large explosions
             ctx.globalAlpha = alpha;
             ctx.drawImage(assets.explosion, -size/2, -size/2, size, size);
           } else {
-            // Fallback explosion - animated fire ball
+            // Fallback explosion or hit explosion
             ctx.globalAlpha = alpha;
             
-            // Outer fire
+            if (isHitExplosion) {
+              // Small bright flash for hits
+              const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size/2);
+              gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`); // Bright white center
+              gradient.addColorStop(0.3, `rgba(255, 255, 0, ${alpha})`); // Yellow
+              gradient.addColorStop(0.6, `rgba(255, 150, 0, ${alpha})`); // Orange
+              gradient.addColorStop(1, `rgba(255, 0, 0, 0)`); // Transparent edge
+              
+              ctx.fillStyle = gradient;
+              ctx.beginPath();
+              ctx.arc(0, 0, size/2, 0, Math.PI * 2);
+              ctx.fill();
+            } else {
+              // Large fireball for destruction
             const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size/2);
             gradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`); // Yellow center
             gradient.addColorStop(0.3, `rgba(255, 100, 0, ${alpha})`); // Orange
@@ -1450,6 +2197,7 @@
             ctx.beginPath();
             ctx.arc(0, 0, size/2, 0, Math.PI * 2);
             ctx.fill();
+            }
           }
           
           ctx.restore();
@@ -1470,6 +2218,63 @@
           
           ctx.restore();
         }
+        
+        // Debug: Draw pixel collision outlines (press 'V' to toggle)
+        if (game.showPixelCollision) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+          ctx.lineWidth = 1;
+          
+          // Draw player aircraft pixel bounds
+          const playerPos = aircraft.getPosition();
+          const playerAngle = aircraft.getAngle();
+          const playerScreenPos = worldToScreen(playerPos.x, playerPos.y);
+          
+          let playerSprite;
+          if (game.inverted && game.gearDown) {
+            playerSprite = assets.spitfireInvertedGear;
+          } else if (game.inverted && !game.gearDown) {
+            playerSprite = assets.spitfireInverted;
+          } else if (!game.inverted && game.gearDown) {
+            playerSprite = assets.spitfireGear;
+          } else {
+            playerSprite = assets.spitfire;
+          }
+          
+          if (playerSprite) {
+            const scale = 0.4 * game.camera.zoom;
+            const w = playerSprite.naturalWidth * scale;
+            const h = playerSprite.naturalHeight * scale;
+            
+            ctx.translate(playerScreenPos.x, playerScreenPos.y);
+            ctx.rotate(playerAngle);
+            ctx.strokeRect(-w/2, -h/2, w, h);
+            ctx.resetTransform();
+          }
+          
+          // Draw enemy aircraft pixel bounds
+          game.enemies.forEach(enemy => {
+            if (enemy.destroyed) return;
+            
+            const pos = enemy.body.getPosition();
+            const angle = enemy.body.getAngle();
+            const screenPos = worldToScreen(pos.x, pos.y);
+            
+            if (assets.loaded.ju88 && assets.ju88) {
+              const originalAspectRatio = assets.ju88.naturalWidth / assets.ju88.naturalHeight;
+              const baseEnemySize = 24 * SCALE * game.camera.zoom;
+              const enemyWidth = baseEnemySize * originalAspectRatio;
+              const enemyHeight = baseEnemySize;
+              
+              ctx.translate(screenPos.x, screenPos.y);
+              ctx.rotate(angle);
+              ctx.strokeRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+              ctx.resetTransform();
+            }
+          });
+          
+          ctx.restore();
+        }
       }
       
       function updateHUD() {
@@ -1482,6 +2287,21 @@
         // Altitude: distance above ground (converted to visual altitude)
         document.getElementById('altitude').textContent = Math.max(0, Math.round(-pos.y * VISUAL_SCALE));
         document.getElementById('zoom').textContent = game.camera.zoom.toFixed(1);
+        
+        // Add landing gear and ground status indicators
+        const gearStatus = document.querySelector('.gear-status') || (() => {
+          const div = document.createElement('div');
+          div.className = 'gear-status';
+          div.style.cssText = 'position:fixed;top:120px;left:20px;color:#fff;font-size:14px;text-shadow:2px 2px 4px rgba(0,0,0,0.8);';
+          document.body.appendChild(div);
+          return div;
+        })();
+        
+        let statusText = `Gear: ${game.gearDown ? 'DOWN' : 'UP'}`;
+        if (game.onGround) {
+          statusText += ` | On Ground (${Math.round(game.groundSpeed * VISUAL_SCALE)} m/s)`;
+        }
+        gearStatus.textContent = statusText;
         
         // Show crash status
         if (game.crashed) {
