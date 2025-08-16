@@ -51,7 +51,7 @@
   </div>
   
   <div class="controls">
-    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • C: Debug • R: Reset
+    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • F: Flip • G: Gear • C: Debug • R: Reset
   </div>
 
   <script src="https://unpkg.com/planck-js@0.3.0/dist/planck.min.js"></script>
@@ -71,6 +71,7 @@
       const SCALE = 20; // pixels per meter
       const WORLD_WIDTH = 4000; // meters
       const WORLD_HEIGHT = 3000; // meters
+      const MAP_BOTTOM_ALTITUDE = 600; // bottom of map is 600 m above ground (ground at 0 m)
       
       // Physics world
       const world = new pl.World(pl.Vec2(0, 9.81));
@@ -101,7 +102,10 @@
         map: null,
         tileableMap: null,
         spitfire: null,
-        loaded: { map: false, tileableMap: false, spitfire: false }
+        spitfireInverted: null,
+        spitfireGear: null,
+        spitfireInvertedGear: null,
+        loaded: { map: false, tileableMap: false, spitfire: false, spitfireInverted: false, spitfireGear: false, spitfireInvertedGear: false }
       };
       
       async function loadAssets() {
@@ -125,6 +129,21 @@
             '../assets/sprites/aircraft/player/Spitfire facing right.png',
             './assets/sprites/aircraft/player/Spitfire facing right.png',
             '/assets/sprites/aircraft/player/Spitfire facing right.png'
+          ],
+          spitfireInverted: [
+            '../assets/sprites/aircraft/player/spitfire upside down.png',
+            './assets/sprites/aircraft/player/spitfire upside down.png',
+            '/assets/sprites/aircraft/player/spitfire upside down.png'
+          ],
+          spitfireGear: [
+            '../assets/sprites/aircraft/player/Spitfire facing right with gear.png',
+            './assets/sprites/aircraft/player/Spitfire facing right with gear.png',
+            '/assets/sprites/aircraft/player/Spitfire facing right with gear.png'
+          ],
+          spitfireInvertedGear: [
+            '../assets/sprites/aircraft/player/spitfire upside down with gear.png',
+            './assets/sprites/aircraft/player/spitfire upside down with gear.png',
+            '/assets/sprites/aircraft/player/spitfire upside down with gear.png'
           ]
         };
         
@@ -171,7 +190,10 @@
           await Promise.all([
             loadImage('map', assetPaths.map),
             loadImage('tileableMap', assetPaths.tileableMap),
-            loadImage('spitfire', assetPaths.spitfire)
+            loadImage('spitfire', assetPaths.spitfire),
+            loadImage('spitfireInverted', assetPaths.spitfireInverted),
+            loadImage('spitfireGear', assetPaths.spitfireGear),
+            loadImage('spitfireInvertedGear', assetPaths.spitfireInvertedGear)
           ]);
           console.log('🎉 All assets loaded successfully!');
         } catch (error) {
@@ -192,7 +214,9 @@
         throttle: 0.4,
         keys: new Set(),
         showCollision: false,
-        crashed: false
+        crashed: false,
+        inverted: false,
+        gearDown: false
       };
       
       // =============================================================================
@@ -201,7 +225,7 @@
       
       window.addEventListener('keydown', (e) => {
         game.keys.add(e.key.toLowerCase());
-        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c'].includes(e.key.toLowerCase())) {
+        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c','f','g'].includes(e.key.toLowerCase())) {
           e.preventDefault();
         }
         
@@ -209,6 +233,18 @@
         if (e.key.toLowerCase() === 'c') {
           game.showCollision = !game.showCollision;
           console.log('🔍 Collision debug:', game.showCollision ? 'ON' : 'OFF');
+        }
+        
+        // Toggle inverted flight mode
+        if (e.key.toLowerCase() === 'f') {
+          game.inverted = !game.inverted;
+          console.log('🔄 Flight mode:', game.inverted ? 'INVERTED' : 'NORMAL');
+        }
+        
+        // Toggle landing gear
+        if (e.key.toLowerCase() === 'g') {
+          game.gearDown = !game.gearDown;
+          console.log('🛬 Landing gear:', game.gearDown ? 'DOWN' : 'UP');
         }
       });
       
@@ -227,10 +263,10 @@
       // PHYSICS
       // =============================================================================
       
-      // Create aircraft - spawn in center of main map above ground
+      // Create aircraft - spawn above ground within main map (y increases downward)
       const aircraft = world.createBody({
         type: 'dynamic',
-        position: pl.Vec2(0, 1500), // Center of main map, safe altitude above y=0 ground
+        position: pl.Vec2(0, -600), // 600 m above ground level (y=0)
         angle: 0,
         linearDamping: 0.1,
         angularDamping: 0.9
@@ -247,18 +283,18 @@
       const groundBodies = [];
       
       function createGroundCollision() {
-        // Create infinite ground collision at y=0 (bottom of map)
-        const groundLevel = 0; // Y position where ground starts (bottom of map)
-        const groundThickness = 200; // How thick the ground collision is (underground)
+        // Create infinite ground collision at y=0 (physical ground)
+        const groundLevel = 0; // ground at 0 m altitude
+        const halfThickness = 0.5; // keep collider thin around y=0
         const infiniteWidth = 100000; // Very wide ground - 100km in each direction
         
         const groundBody = world.createBody({
           type: 'static',
-          position: pl.Vec2(0, groundLevel - groundThickness / 2) // Below y=0
+          position: pl.Vec2(0, groundLevel) // center at y=0
         });
         
         groundBody.createFixture({
-          shape: pl.Box(infiniteWidth / 2, groundThickness / 2),
+          shape: pl.Box(infiniteWidth / 2, halfThickness),
           friction: 1.0,
           restitution: 0.0 // No bounce - aircraft stops when hitting ground
         });
@@ -266,9 +302,9 @@
         groundBodies.push({
           body: groundBody,
           x: 0,
-          y: groundLevel - groundThickness / 2,
+          y: groundLevel,
           width: infiniteWidth,
-          height: groundThickness,
+          height: halfThickness * 2,
           isMainGround: true
         });
         
@@ -323,7 +359,7 @@
         
         // Reset
         if (reset) {
-          aircraft.setTransform(pl.Vec2(0, 1500), 0); // Reset to center of main map, safe altitude
+          aircraft.setTransform(pl.Vec2(0, -600), 0); // Reset to safe altitude above ground
           aircraft.setLinearVelocity(pl.Vec2(0, 0));
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
@@ -402,7 +438,7 @@
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
         
         // Background - main map in center, tileable on sides
-        const groundLevel = 0; // Map bottom at y=0
+        const groundLevel = 0; // physical ground reference
         const mapHeight = WORLD_HEIGHT;
         
         if (assets.loaded.map && assets.map && assets.loaded.tileableMap && assets.tileableMap) {
@@ -410,8 +446,9 @@
           const mainMapWidth = WORLD_WIDTH; // 4000m wide
           const mainMapPixelWidth = mainMapWidth * SCALE * game.camera.zoom;
           const mainMapPixelHeight = mapHeight * SCALE * game.camera.zoom;
-          // Draw main map in center (bottom at y=0, top at y=mapHeight)
-          const mainMapPos = worldToScreen(-mainMapWidth/2, 0);
+          // Draw main map in center such that its bottom sits at MAP_BOTTOM_ALTITUDE
+          // So the draw origin (top-left) is at y = (MAP_BOTTOM_ALTITUDE - mapHeight)
+          const mainMapPos = worldToScreen(-mainMapWidth/2, MAP_BOTTOM_ALTITUDE - mapHeight);
           ctx.drawImage(assets.map, mainMapPos.x, mainMapPos.y, mainMapPixelWidth, mainMapPixelHeight);
           
           // Calculate tileable map dimensions
@@ -424,7 +461,7 @@
           const leftStartX = -mainMapWidth/2;
           const visibleLeftStart = Math.floor((game.camera.x - canvasWidth/(2*SCALE*game.camera.zoom) - leftStartX) / tileableMapWorldWidth) * tileableMapWorldWidth + leftStartX;
           for (let x = visibleLeftStart; x > game.camera.x - canvasWidth/(SCALE*game.camera.zoom); x -= tileableMapWorldWidth) {
-            const tilePos = worldToScreen(x - tileableMapWorldWidth, 0);
+            const tilePos = worldToScreen(x - tileableMapWorldWidth, MAP_BOTTOM_ALTITUDE - mapHeight);
             ctx.drawImage(assets.tileableMap, tilePos.x, tilePos.y, tileableMapPixelWidth, tileableMapPixelHeight);
           }
           
@@ -432,7 +469,7 @@
           const rightStartX = mainMapWidth/2;
           const visibleRightStart = Math.floor((game.camera.x - canvasWidth/(2*SCALE*game.camera.zoom) - rightStartX) / tileableMapWorldWidth) * tileableMapWorldWidth + rightStartX;
           for (let x = visibleRightStart; x < game.camera.x + canvasWidth/(SCALE*game.camera.zoom); x += tileableMapWorldWidth) {
-            const tilePos = worldToScreen(x, 0);
+            const tilePos = worldToScreen(x, MAP_BOTTOM_ALTITUDE - mapHeight);
             ctx.drawImage(assets.tileableMap, tilePos.x, tilePos.y, tileableMapPixelWidth, tileableMapPixelHeight);
           }
           
@@ -477,19 +514,47 @@
         ctx.translate(screenPos.x, screenPos.y);
         ctx.rotate(angle);
         
-        if (assets.loaded.spitfire && assets.spitfire) {
+        // Choose sprite based on inverted mode and gear state
+        let currentSprite, spriteLoaded;
+        
+        if (game.inverted && game.gearDown) {
+          currentSprite = assets.spitfireInvertedGear;
+          spriteLoaded = assets.loaded.spitfireInvertedGear;
+        } else if (game.inverted && !game.gearDown) {
+          currentSprite = assets.spitfireInverted;
+          spriteLoaded = assets.loaded.spitfireInverted;
+        } else if (!game.inverted && game.gearDown) {
+          currentSprite = assets.spitfireGear;
+          spriteLoaded = assets.loaded.spitfireGear;
+        } else {
+          currentSprite = assets.spitfire;
+          spriteLoaded = assets.loaded.spitfire;
+        }
+        
+        if (spriteLoaded && currentSprite) {
           const scale = 0.4 * game.camera.zoom;
-          const w = assets.spitfire.naturalWidth * scale;
-          const h = assets.spitfire.naturalHeight * scale;
-          ctx.drawImage(assets.spitfire, -w/2, -h/2, w, h);
+          const w = currentSprite.naturalWidth * scale;
+          const h = currentSprite.naturalHeight * scale;
+          ctx.drawImage(currentSprite, -w/2, -h/2, w, h);
         } else {
           // Fallback plane
-          ctx.fillStyle = '#4169E1';
-          ctx.strokeStyle = '#000080';
+          let fillColor = '#4169E1'; // Default blue
+          if (game.inverted && game.gearDown) fillColor = '#800080'; // Purple for inverted with gear
+          else if (game.inverted) fillColor = '#E14169'; // Red for inverted
+          else if (game.gearDown) fillColor = '#228B22'; // Green for gear down
+          
+          ctx.fillStyle = fillColor;
+          ctx.strokeStyle = game.inverted ? '#801080' : '#000080';
           ctx.lineWidth = 2;
           const size = 20 * game.camera.zoom;
           ctx.fillRect(-size, -size/3, size*2, size*2/3);
           ctx.strokeRect(-size, -size/3, size*2, size*2/3);
+          
+          // Draw gear indicator
+          if (game.gearDown) {
+            ctx.fillStyle = '#FFD700'; // Gold for gear
+            ctx.fillRect(-size*0.3, size*0.3, size*0.6, size*0.2);
+          }
         }
         
         ctx.restore();
@@ -518,7 +583,8 @@
         
         document.getElementById('speed').textContent = Math.round(speed);
         document.getElementById('throttle').textContent = Math.round(game.throttle * 100);
-        document.getElementById('altitude').textContent = Math.round(Math.max(0, pos.y)); // Altitude = y position (y=0 is ground)
+        // Altitude: distance above ground. Our world uses y increasing downward, so altitude is -y when above ground
+        document.getElementById('altitude').textContent = Math.max(0, Math.round(-pos.y));
         document.getElementById('zoom').textContent = game.camera.zoom.toFixed(1);
         
         // Show crash status
