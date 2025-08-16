@@ -1068,7 +1068,7 @@
         }
         
         // Thrust - Further increased for higher top speeds with altitude reduction
-        let maxThrust = 200000; // Increased even more to overcome 240 m/s cap
+        let maxThrust = 300000; // Massively increased to overcome speed limits
         
         // Altitude-based thrust reduction (same as lift)
         const visualAltitude = -pos.y * VISUAL_SCALE; // Convert to visual altitude
@@ -1086,6 +1086,20 @@
         const thrustX = Math.cos(angle) * thrust;
         const thrustY = Math.sin(angle) * thrust;
         aircraft.applyForceToCenter(pl.Vec2(thrustX, thrustY), true);
+        
+        // CRITICAL FIX: Manually override Box2D's velocity cap
+        // Box2D caps at ~120 m/s physics (240 m/s visual), we need to break through
+        const currentSpeed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+        const targetSpeed = game.throttle * 250; // Target speed based on throttle (up to 250 m/s physics = 500 m/s visual)
+        
+        // If we're near the 120 m/s cap and should be going faster, boost manually
+        if (game.throttle > 0.5 && currentSpeed > 115 && currentSpeed < 125 && targetSpeed > currentSpeed) {
+          const velocityDirection = Math.atan2(vel.y, vel.x);
+          const newVelX = Math.cos(velocityDirection) * targetSpeed;
+          const newVelY = Math.sin(velocityDirection) * targetSpeed;
+          aircraft.setLinearVelocity(pl.Vec2(newVelX, newVelY));
+          console.log(`⚡ Breaking speed cap: ${(currentSpeed * VISUAL_SCALE).toFixed(0)} → ${(targetSpeed * VISUAL_SCALE).toFixed(0)} m/s`);
+        }
         
         // Simple aerodynamics
         if (speed > 1) {
@@ -1369,16 +1383,15 @@
           
           ctx.save();
           ctx.translate(screenPos.x, screenPos.y);
-          // Rotate 180 degrees to fix upside down, and don't add the angle since they fly backwards
-          ctx.rotate(angle + Math.PI);
+          // Just rotate by angle, no flipping needed
+          ctx.rotate(angle);
           
           // Enemy aircraft size (Ju-88 heavy bomber - much larger and much taller)
           const enemyWidth = 24 * SCALE * game.camera.zoom; // 48m wingspan (2x larger)
           const enemyHeight = 16 * SCALE * game.camera.zoom; // 32m length (very tall, chunky bomber)
           
           if (assets.loaded.ju88 && assets.ju88) {
-            // Use Ju-88 sprite - flip horizontally to correct backwards orientation
-            ctx.scale(-1, 1); // Flip horizontally
+            // Use Ju-88 sprite without any flips
             ctx.drawImage(assets.ju88, -enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
           } else {
             // Fallback enemy - dark grey bomber
@@ -1391,19 +1404,19 @@
             ctx.strokeRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
           }
           
-          // Health bar above enemy
-          const barWidth = enemyWidth;
-          const barHeight = 4;
-          const barY = -enemyHeight/2 - 10;
-          
-          // Background
-          ctx.fillStyle = '#FF0000';
-          ctx.fillRect(-barWidth/2, barY, barWidth, barHeight);
-          
-          // Health
-          const healthRatio = enemy.health / enemy.maxHealth;
-          ctx.fillStyle = healthRatio > 0.5 ? '#00FF00' : (healthRatio > 0.25 ? '#FFFF00' : '#FF0000');
-          ctx.fillRect(-barWidth/2, barY, barWidth * healthRatio, barHeight);
+          // Health bar removed - keeping invisible as requested
+          // const barWidth = enemyWidth;
+          // const barHeight = 4;
+          // const barY = -enemyHeight/2 - 10;
+          // 
+          // // Background
+          // ctx.fillStyle = '#FF0000';
+          // ctx.fillRect(-barWidth/2, barY, barWidth, barHeight);
+          // 
+          // // Health
+          // const healthRatio = enemy.health / enemy.maxHealth;
+          // ctx.fillStyle = healthRatio > 0.5 ? '#00FF00' : (healthRatio > 0.25 ? '#FFFF00' : '#FF0000');
+          // ctx.fillRect(-barWidth/2, barY, barWidth * healthRatio, barHeight);
           
           ctx.restore();
         });
