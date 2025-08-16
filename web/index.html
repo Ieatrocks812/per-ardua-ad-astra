@@ -557,7 +557,7 @@
             });
             
             enemyBody.createFixture({
-              shape: pl.Box(12, 3), // Much larger Ju-88 bomber (24m x 6m) 
+              shape: pl.Box(12, 5), // Much larger Ju-88 bomber (24m x 10m - taller)
               density: 25,
               friction: 0.3,
               restitution: 0.1
@@ -941,6 +941,51 @@
             ));
           }
         }
+        
+        // Check if enemy aircraft hit ground
+        const enemyA = bodyA.getUserData()?.type === 'enemy' ? bodyA : null;
+        const enemyB = bodyB.getUserData()?.type === 'enemy' ? bodyB : null;
+        
+        if (enemyA || enemyB) {
+          const enemyBody = enemyA || enemyB;
+          const enemy = enemyBody.getUserData().enemy;
+          
+          if (enemy && !enemy.destroyed) {
+            const vel = enemyBody.getLinearVelocity();
+            const verticalSpeed = Math.abs(vel.y);
+            const totalSpeed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+            
+            console.log(`💥 Enemy ground collision! Vertical: ${verticalSpeed.toFixed(1)} m/s, Total: ${totalSpeed.toFixed(1)} m/s`);
+            
+            // Enemy takes damage based on impact speed
+            let damage = 0;
+            if (verticalSpeed > 15) {
+              damage = 5; // High speed impact - major damage
+              console.log('💥 Enemy heavy ground impact - major damage!');
+            } else if (verticalSpeed > 8) {
+              damage = 3; // Medium speed impact - moderate damage
+              console.log('💥 Enemy moderate ground impact - damage taken!');
+            } else if (verticalSpeed > 3) {
+              damage = 1; // Low speed impact - minor damage
+              console.log('💥 Enemy light ground contact - minor damage!');
+            }
+            
+            if (damage > 0) {
+              enemy.health -= damage;
+              console.log(`⚠️ Enemy health: ${enemy.health}/${enemy.maxHealth}`);
+              
+              // Check if enemy is destroyed
+              if (enemy.health <= 0 && !enemy.destroyed) {
+                destroyEnemy(enemy);
+              } else {
+                // Reduce enemy speed on ground impact
+                enemyBody.setLinearVelocity(pl.Vec2(vel.x * 0.4, vel.y * 0.1));
+                // Add some spin from the impact
+                enemyBody.setAngularVelocity(enemyBody.getAngularVelocity() + (Math.random() - 0.5) * 4);
+              }
+            }
+          }
+        }
       });
       
       // =============================================================================
@@ -1322,9 +1367,9 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(angle);
           
-          // Enemy aircraft size (Ju-88 heavy bomber - much larger)
+          // Enemy aircraft size (Ju-88 heavy bomber - much larger and taller)
           const enemyWidth = 24 * SCALE * game.camera.zoom; // 48m wingspan (2x larger)
-          const enemyHeight = 6 * SCALE * game.camera.zoom; // 12m length (2x longer, less thin)
+          const enemyHeight = 10 * SCALE * game.camera.zoom; // 20m length (taller, no more flying pencils)
           
           if (assets.loaded.ju88 && assets.ju88) {
             // Use Ju-88 sprite
