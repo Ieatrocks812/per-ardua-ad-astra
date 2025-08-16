@@ -224,27 +224,31 @@
       // =============================================================================
       
       window.addEventListener('keydown', (e) => {
-        game.keys.add(e.key.toLowerCase());
-        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c','f','g'].includes(e.key.toLowerCase())) {
+        const key = e.key.toLowerCase();
+        game.keys.add(key);
+        console.log('🎯 Key pressed:', key); // Debug key presses
+        
+        if (['w','s','a','d','q','e','arrowleft','arrowright','r','c','f','g'].includes(key)) {
           e.preventDefault();
         }
         
         // Toggle collision debug view
-        if (e.key.toLowerCase() === 'c') {
+        if (key === 'c') {
           game.showCollision = !game.showCollision;
           console.log('🔍 Collision debug:', game.showCollision ? 'ON' : 'OFF');
         }
         
         // Toggle inverted flight mode
-        if (e.key.toLowerCase() === 'f') {
+        if (key === 'f') {
           game.inverted = !game.inverted;
           console.log('🔄 Flight mode:', game.inverted ? 'INVERTED' : 'NORMAL');
         }
         
         // Toggle landing gear
-        if (e.key.toLowerCase() === 'g') {
+        if (key === 'g') {
           game.gearDown = !game.gearDown;
           console.log('🛬 Landing gear:', game.gearDown ? 'DOWN' : 'UP');
+          console.log('🎮 Current game state:', { inverted: game.inverted, gearDown: game.gearDown });
         }
       });
       
@@ -269,7 +273,7 @@
         position: pl.Vec2(0, -600), // 600 m above ground level (y=0)
         angle: 0,
         linearDamping: 0.1,
-        angularDamping: 0.9
+        angularDamping: 0.5 // Reduced from 0.9 for less rotation resistance
       });
       
       aircraft.createFixture({
@@ -381,12 +385,12 @@
         if (zoomIn) game.camera.zoom = Math.min(game.camera.maxZoom, game.camera.zoom + dt * 1.2);
         if (zoomOut) game.camera.zoom = Math.max(game.camera.minZoom, game.camera.zoom - dt * 1.2);
         
-        // Flight controls
-        const torque = 12000;
+        // Flight controls - Increased torque for faster turning
+        const torque = 25000; // Increased from 12000 for much faster turning
         if (pitchUp) aircraft.applyTorque(-torque, true);
         if (pitchDown) aircraft.applyTorque(torque, true);
-        if (rollLeft) aircraft.applyTorque(-torque * 0.5, true);
-        if (rollRight) aircraft.applyTorque(torque * 0.5, true);
+        if (rollLeft) aircraft.applyTorque(-torque * 0.7, true); // Increased from 0.5
+        if (rollRight) aircraft.applyTorque(torque * 0.7, true);
         
         // Thrust
         const maxThrust = 30000;
@@ -413,8 +417,8 @@
             Math.sin(liftAngle) * liftMag
           ), true);
           
-          // Drag
-          const dragCoeff = 0.08 + Math.abs(liftCoeff) * 0.1;
+          // Drag - Reduced for better flight performance
+          const dragCoeff = 0.04 + Math.abs(liftCoeff) * 0.05; // Halved from 0.08 and 0.1
           const dragMag = q * wingArea * dragCoeff;
           aircraft.applyForceToCenter(pl.Vec2(
             -vel.x * dragMag / speed,
