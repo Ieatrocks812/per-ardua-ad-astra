@@ -184,7 +184,8 @@
         camera: { x: 0, y: 0, zoom: 0.8, minZoom: 0.2, maxZoom: 3.0 },
         throttle: 0.4,
         keys: new Set(),
-        showCollision: false
+        showCollision: false,
+        crashed: false
       };
       
       // =============================================================================
@@ -239,44 +240,58 @@
       const groundBodies = [];
       
       function createGroundCollision() {
-        // Create multiple ground segments to match terrain features in map.png
-        const groundSegments = [
-          // Main ground level across the map
-          { x: 0, y: 1400, width: WORLD_WIDTH, height: 200 },
-          
-          // Additional terrain features (adjust these based on your map)
-          { x: -1500, y: 1200, width: 800, height: 100 },   // Left terrain
-          { x: 1500, y: 1200, width: 800, height: 100 },    // Right terrain
-          { x: -500, y: 1000, width: 400, height: 80 },     // Hills/elevated areas
-          { x: 500, y: 1000, width: 400, height: 80 },
-          
-          // Mountains or elevated terrain
-          { x: -1000, y: 800, width: 300, height: 200 },
-          { x: 1000, y: 800, width: 300, height: 200 },
-        ];
+        // Create a simple ground collision area that covers the bottom half of the map
+        const groundLevel = 1200; // Y position where ground starts
+        const groundThickness = 600; // How thick the ground collision is
         
-        groundSegments.forEach((segment, index) => {
-          const groundBody = world.createBody({
-            type: 'static',
-            position: pl.Vec2(segment.x, segment.y)
-          });
-          
-          groundBody.createFixture({
-            shape: pl.Box(segment.width / 2, segment.height / 2),
-            friction: 0.9,
-            restitution: 0.2
-          });
-          
-          groundBodies.push({
-            body: groundBody,
-            ...segment
-          });
+        const groundBody = world.createBody({
+          type: 'static',
+          position: pl.Vec2(0, groundLevel + groundThickness / 2)
         });
         
-        console.log(`🏔️ Created ${groundSegments.length} ground collision segments`);
+        groundBody.createFixture({
+          shape: pl.Box(WORLD_WIDTH / 2, groundThickness / 2),
+          friction: 1.0,
+          restitution: 0.0 // No bounce - aircraft stops when hitting ground
+        });
+        
+        groundBodies.push({
+          body: groundBody,
+          x: 0,
+          y: groundLevel + groundThickness / 2,
+          width: WORLD_WIDTH,
+          height: groundThickness,
+          isMainGround: true
+        });
+        
+        console.log(`🟢 Created ground collision at y=${groundLevel}`);
       }
       
       createGroundCollision();
+      
+      // Add collision detection for crashing
+      world.on('begin-contact', (contact) => {
+        const bodyA = contact.getFixtureA().getBody();
+        const bodyB = contact.getFixtureB().getBody();
+        
+        // Check if aircraft hit ground
+        if ((bodyA === aircraft || bodyB === aircraft)) {
+          const vel = aircraft.getLinearVelocity();
+          const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+          
+          // Crash if hitting ground too fast
+          if (speed > 15) {
+            game.crashed = true;
+            console.log('💥 CRASHED! Speed was:', speed.toFixed(1), 'm/s');
+            
+            // Stop the aircraft
+            aircraft.setLinearVelocity(pl.Vec2(0, 0));
+            aircraft.setAngularVelocity(0);
+          } else {
+            console.log('🛬 Safe landing at speed:', speed.toFixed(1), 'm/s');
+          }
+        }
+      });
       
       // =============================================================================
       // PHYSICS UPDATE
@@ -305,6 +320,12 @@
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
           game.camera.zoom = 0.8;
+          game.crashed = false; // Reset crash state
+          return;
+        }
+        
+        // Don't allow control if crashed
+        if (game.crashed) {
           return;
         }
         
@@ -394,6 +415,22 @@
           }
         }
         
+        // Draw green ground area
+        groundBodies.forEach(ground => {
+          if (ground.isMainGround) {
+            const groundPos = worldToScreen(ground.x - ground.width/2, ground.y - ground.height/2);
+            const groundWidth = ground.width * SCALE * game.camera.zoom;
+            const groundHeight = ground.height * SCALE * game.camera.zoom;
+            
+            ctx.fillStyle = '#228B22'; // Forest green
+            ctx.fillRect(groundPos.x, groundPos.y, groundWidth, groundHeight);
+            
+            // Add a grass texture effect
+            ctx.fillStyle = '#32CD32'; // Lime green for grass top
+            ctx.fillRect(groundPos.x, groundPos.y, groundWidth, Math.min(20 * game.camera.zoom, groundHeight * 0.1));
+          }
+        });
+        
         // Aircraft
         const pos = aircraft.getPosition();
         const angle = aircraft.getAngle();
@@ -444,8 +481,23 @@
         
         document.getElementById('speed').textContent = Math.round(speed);
         document.getElementById('throttle').textContent = Math.round(game.throttle * 100);
-        document.getElementById('altitude').textContent = Math.round(Math.max(0, 750 - pos.y));
+        document.getElementById('altitude').textContent = Math.round(Math.max(0, 1200 - pos.y)); // Updated for new ground level
         document.getElementById('zoom').textContent = game.camera.zoom.toFixed(1);
+        
+        // Show crash status
+        if (game.crashed) {
+          const crashDiv = document.querySelector('.crash-indicator') || (() => {
+            const div = document.createElement('div');
+            div.className = 'crash-indicator';
+            div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:red;font-size:24px;font-weight:bold;text-shadow:2px 2px 4px black;';
+            document.body.appendChild(div);
+            return div;
+          })();
+          crashDiv.textContent = '💥 CRASHED! Press R to restart';
+        } else {
+          const crashDiv = document.querySelector('.crash-indicator');
+          if (crashDiv) crashDiv.remove();
+        }
       }
       
       function updateCamera() {
