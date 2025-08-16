@@ -557,7 +557,7 @@
             });
             
             enemyBody.createFixture({
-              shape: pl.Box(6, 1.5), // Ju-88 bomber size (12m x 3m)
+              shape: pl.Box(12, 3), // Much larger Ju-88 bomber (24m x 6m) 
               density: 25,
               friction: 0.3,
               restitution: 0.1
@@ -644,10 +644,10 @@
               enemy.body.applyForceToCenter(thrustForce, true);
             }
             
-            // Aerodynamics (same as player)
+            // Aerodynamics (same as player but larger wing area)
             if (speed > 1) {
               const q = 0.5 * 1.225 * speed * speed; // Dynamic pressure
-              const wingArea = 25; // Wing area in m²
+              const wingArea = 60; // Larger wing area for heavy bomber (48m wingspan)
               
               // Calculate angle of attack relative to velocity
               const velocityAngle = Math.atan2(vel.y, vel.x);
@@ -705,8 +705,8 @@
               (proj.y - pos.y) * (proj.y - pos.y)
             );
             
-            // Simple collision detection - within 10 physics units (20m)
-            if (distance < 10) {
+            // Simple collision detection - within 15 physics units (30m) for larger bombers
+            if (distance < 15) {
               console.log('💥 Projectile hit enemy!', { distance, enemyHealth: enemy.health });
               
               // Damage enemy
@@ -1322,9 +1322,9 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(angle);
           
-          // Enemy aircraft size (Ju-88 bomber)
-          const enemyWidth = 12 * SCALE * game.camera.zoom; // 24m wingspan
-          const enemyHeight = 3 * SCALE * game.camera.zoom; // 6m length
+          // Enemy aircraft size (Ju-88 heavy bomber - much larger)
+          const enemyWidth = 24 * SCALE * game.camera.zoom; // 48m wingspan (2x larger)
+          const enemyHeight = 6 * SCALE * game.camera.zoom; // 12m length (2x longer, less thin)
           
           if (assets.loaded.ju88 && assets.ju88) {
             // Use Ju-88 sprite
