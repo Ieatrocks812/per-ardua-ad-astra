@@ -34,20 +34,17 @@
   // World scale: meters to pixels
   const metersToPixels = 6; // 1 m = 6 px
 
-  // Aircraft state
+  // Box2D world
+  const pl = window.planck;
+  const world = new pl.World(pl.Vec2(0, 9.81)); // gravity downward
+
+  // Aircraft control state
   const state = {
-    position: { x: 0, y: 300 }, // meters
-    velocity: { x: 30, y: 0 }, // m/s (start with some forward speed)
-    angle: 0, // radians (0 = facing +X)
-    angularVelocity: 0, // rad/s
     throttle: 0.6, // 0..1
   };
 
   // Camera
-  const camera = {
-    x: 0,
-    y: 0,
-  };
+  const camera = { x: 0, y: 0 };
 
   // Controls
   const keysDown = new Set();
@@ -61,23 +58,18 @@
     keysDown.delete(e.key.toLowerCase());
   });
 
-  // Physics constants
-  const massKg = 3000; // approximate mass
-  const gravity = 9.81; // m/s^2
+  // Physics/aero constants
+  const targetMassKg = 3000; // desired aircraft mass
   const airDensity = 1.225; // kg/m^3
   const wingArea = 16; // m^2
   const maxThrustN = 25000; // Newtons
-  const baseDragCoeff = 0.03; // baseline parasitic drag
-  const liftSlopePerRad = 5.0; // approx 2*pi is 6.28; lower for simplicity
+  const baseDragCoeff = 0.03;
+  const liftSlopePerRad = 5.0;
   const stallAngleRad = 15 * Math.PI / 180;
-  const clMax = 1.2; // cap lift coefficient
-  const aspectRatio = 7; // for induced drag estimate
+  const clMax = 1.2;
+  const aspectRatio = 7;
   const oswaldEff = 0.8;
-  const angularTorque = 22000; // control authority
-  const angularDamping = 0.9; // reduces spin over time
-  const linearDamping = 0.002; // small speed damping
-
-  function sign(value) { return value < 0 ? -1 : 1; }
+  const controlTorque = 22000; // N*m
 
   function wrapPi(angle) {
     while (angle > Math.PI) angle -= 2 * Math.PI;
@@ -85,28 +77,67 @@
     return angle;
   }
 
-  function update(dt) {
-    // Inputs
+  // Create plane body (approx rectangle)
+  const planeDims = { width: 10, height: 3 }; // meters
+  const planeBody = world.createBody({
+    type: 'dynamic',
+    position: pl.Vec2(0, 300),
+    linearVelocity: pl.Vec2(30, 0),
+    angle: 0,
+    angularDamping: 0.5,
+    linearDamping: 0.0,
+  });
+  const planeArea = planeDims.width * planeDims.height;
+  const planeDensity = targetMassKg / planeArea; // kg/m^2
+  planeBody.createFixture(pl.Box(planeDims.width / 2, planeDims.height / 2), {
+    density: planeDensity,
+    friction: 0.6,
+    restitution: 0.1,
+    filterCategoryBits: 0x0002,
+    filterMaskBits: 0xFFFF,
+  });
+
+  // Create ground: repeating T shapes
+  const groundY = 600; // meters
+  const groundTs = [];
+  function createGroundRow() {
+    const topWidth = 40; // m
+    const topThickness = 3; // m
+    const stemHeight = 25; // m (downward)
+    const stemThickness = 3; // m
+    const spacing = 50; // m between Ts
+    const startX = -5000;
+    const endX = 5000;
+
+    for (let x = startX; x <= endX; x += spacing) {
+      const body = world.createBody({ type: 'static', position: pl.Vec2(x, groundY) });
+      // Top bar centered at (0,0) of the body
+      body.createFixture(pl.Box(topWidth / 2, topThickness / 2, pl.Vec2(0, 0), 0), {
+        friction: 0.9,
+        restitution: 0.0,
+      });
+      // Stem extends downward from the top bar
+      body.createFixture(
+        pl.Box(stemThickness / 2, stemHeight / 2, pl.Vec2(0, topThickness / 2 + stemHeight / 2), 0),
+        { friction: 0.9, restitution: 0.0 }
+      );
+      groundTs.push({ body, topWidth, topThickness, stemHeight, stemThickness });
+    }
+  }
+  createGroundRow();
+
+  function updateControlsAndForces(dt) {
     const pitchUp = keysDown.has('arrowup') || keysDown.has('w');
     const pitchDown = keysDown.has('arrowdown') || keysDown.has('s');
-    const throttleUp = keysDown.has("+") || keysDown.has('=') || keysDown.has(']');
+    const throttleUp = keysDown.has('+') || keysDown.has('=') || keysDown.has(']');
     const throttleDown = keysDown.has('-') || keysDown.has('_') || keysDown.has('[');
     const stabilize = keysDown.has(' ');
 
-    // Stabilize: damp angular velocity and gently level
-    if (stabilize) {
-      state.angularVelocity *= 0.92;
-      state.angle *= 0.98;
-    }
-
     // Reset
     if (keysDown.has('r')) {
-      state.position.x = 0;
-      state.position.y = 300;
-      state.velocity.x = 30;
-      state.velocity.y = 0;
-      state.angle = 0;
-      state.angularVelocity = 0;
+      planeBody.setTransform(pl.Vec2(0, 300), 0);
+      planeBody.setLinearVelocity(pl.Vec2(30, 0));
+      planeBody.setAngularVelocity(0);
       state.throttle = 0.6;
     }
 
@@ -116,90 +147,60 @@
       state.throttle = Math.max(0, Math.min(1, state.throttle + throttleChange * dt));
     }
 
-    // Control torque from pitch
+    // Apply control torque
     let controlInput = 0;
     if (pitchUp) controlInput += 1;
     if (pitchDown) controlInput -= 1;
-    state.angularVelocity += (controlInput * angularTorque / (massKg * 50)) * dt;
-    state.angularVelocity *= Math.pow(1 - Math.min(0.99, angularDamping * dt), 1);
-    state.angle += state.angularVelocity * dt;
-    state.angle = wrapPi(state.angle);
+    if (controlInput !== 0) {
+      planeBody.applyTorque(controlInput * controlTorque, true);
+    }
 
-    // Unit vectors
-    const heading = { x: Math.cos(state.angle), y: Math.sin(state.angle) };
+    // Stabilize (PD control towards level)
+    if (stabilize) {
+      const angle = wrapPi(planeBody.getAngle());
+      const angVel = planeBody.getAngularVelocity();
+      const kp = 15000;
+      const kd = 4000;
+      const torque = -kp * angle - kd * angVel;
+      planeBody.applyTorque(torque, true);
+    }
 
-    // Thrust (body forward)
-    const thrust = {
-      x: heading.x * state.throttle * maxThrustN,
-      y: heading.y * state.throttle * maxThrustN,
-    };
+    // Aerodynamic forces
+    const vel = planeBody.getLinearVelocity();
+    const speed = Math.hypot(vel.x, vel.y);
+    const angle = planeBody.getAngle();
+    const heading = { x: Math.cos(angle), y: Math.sin(angle) };
 
-    // Gravity
-    const gravityForce = { x: 0, y: massKg * gravity };
+    // Thrust along heading
+    const thrustForce = pl.Vec2(heading.x * state.throttle * maxThrustN, heading.y * state.throttle * maxThrustN);
+    planeBody.applyForceToCenter(thrustForce, true);
 
-    // Aerodynamics based on airspeed (opposes velocity)
-    const speed = Math.hypot(state.velocity.x, state.velocity.y);
-    let drag = { x: 0, y: 0 };
-    let lift = { x: 0, y: 0 };
     if (speed > 0.1) {
-      const velDir = { x: state.velocity.x / speed, y: state.velocity.y / speed };
-      const aoa = wrapPi(state.angle - Math.atan2(state.velocity.y, state.velocity.x));
+      const velDir = { x: vel.x / speed, y: vel.y / speed };
+      const aoa = wrapPi(angle - Math.atan2(vel.y, vel.x));
 
-      // Lift coefficient with simple stall behavior
       let cl = liftSlopePerRad * aoa;
       if (Math.abs(aoa) > stallAngleRad) {
         const excess = Math.abs(aoa) - stallAngleRad;
-        cl *= Math.max(0.2, 1 - excess * 2); // lose lift past stall
+        cl *= Math.max(0.2, 1 - excess * 2);
       }
       cl = Math.max(-clMax, Math.min(clMax, cl));
 
-      // Induced drag approx
       const inducedDrag = (cl * cl) / (Math.PI * aspectRatio * oswaldEff);
       const cd = baseDragCoeff + inducedDrag;
-
-      const q = 0.5 * airDensity * speed * speed; // dynamic pressure
+      const q = 0.5 * airDensity * speed * speed;
 
       // Drag opposite velocity
       const dragMag = q * wingArea * cd;
-      drag = { x: -velDir.x * dragMag, y: -velDir.y * dragMag };
+      const dragForce = pl.Vec2(-velDir.x * dragMag, -velDir.y * dragMag);
+      planeBody.applyForceToCenter(dragForce, true);
 
-      // Lift perpendicular to velocity (to the left normal). Sign via cl
+      // Lift perpendicular to velocity
       const normalLeft = { x: -velDir.y, y: velDir.x };
       const liftMag = q * wingArea * cl;
-      lift = { x: normalLeft.x * liftMag, y: normalLeft.y * liftMag };
+      const liftForce = pl.Vec2(normalLeft.x * liftMag, normalLeft.y * liftMag);
+      planeBody.applyForceToCenter(liftForce, true);
     }
-
-    // Sum forces
-    const force = {
-      x: thrust.x + drag.x + lift.x + gravityForce.x,
-      y: thrust.y + drag.y + lift.y + gravityForce.y,
-    };
-
-    // Integrate (semi-implicit Euler)
-    state.velocity.x += (force.x / massKg) * dt;
-    state.velocity.y += (force.y / massKg) * dt;
-
-    // Linear damping
-    state.velocity.x *= 1 - Math.min(0.99, linearDamping * dt);
-    state.velocity.y *= 1 - Math.min(0.99, linearDamping * dt);
-
-    state.position.x += state.velocity.x * dt;
-    state.position.y += state.velocity.y * dt;
-
-    // Prevent going far below ground level (y increases downward). Simulated ground at y=600m
-    const groundY = 600;
-    if (state.position.y > groundY) {
-      state.position.y = groundY;
-      if (state.velocity.y > 0) state.velocity.y *= -0.2; // bounce
-    }
-
-    // Camera follows with slight lead and smoothing
-    const lead = 2.0;
-    const targetCamX = state.position.x + state.velocity.x * lead;
-    const targetCamY = state.position.y + state.velocity.y * 0.5;
-    const smooth = 1 - Math.pow(0.001, dt);
-    camera.x += (targetCamX - camera.x) * smooth;
-    camera.y += (targetCamY - camera.y) * smooth;
   }
 
   function drawBackground() {
@@ -239,28 +240,60 @@
   }
 
   function drawPlane() {
-    const pos = worldToScreen(state.position.x, state.position.y);
+    const pos = worldToScreen(planeBody.getPosition().x, planeBody.getPosition().y);
     const img = images.plane;
     const baseScale = 0.6; // image scale on screen
     const width = img.naturalWidth * baseScale;
     const height = img.naturalHeight * baseScale;
     context.save();
     context.translate(pos.x, pos.y);
-    context.rotate(state.angle);
+    context.rotate(planeBody.getAngle());
     context.drawImage(img, -width * 0.4, -height * 0.5, width, height);
     context.restore();
   }
 
+  function drawGround() {
+    context.save();
+    context.fillStyle = 'rgba(120, 200, 120, 0.9)';
+    context.strokeStyle = 'rgba(40, 80, 40, 0.8)';
+    context.lineWidth = 1;
+
+    for (const t of groundTs) {
+      const bodyPos = t.body.getPosition();
+      const topLeft = worldToScreen(bodyPos.x - t.topWidth / 2, bodyPos.y - t.topThickness / 2);
+      const topRight = worldToScreen(bodyPos.x + t.topWidth / 2, bodyPos.y - t.topThickness / 2);
+      const bottomLeft = worldToScreen(bodyPos.x - t.topWidth / 2, bodyPos.y + t.topThickness / 2);
+      const bottomRight = worldToScreen(bodyPos.x + t.topWidth / 2, bodyPos.y + t.topThickness / 2);
+
+      // Top bar
+      context.beginPath();
+      context.rect(topLeft.x, topLeft.y, (topRight.x - topLeft.x), (bottomLeft.y - topLeft.y));
+      context.fill();
+      context.stroke();
+
+      // Stem
+      const stemTop = worldToScreen(bodyPos.x - t.stemThickness / 2, bodyPos.y + t.topThickness / 2);
+      const stemBottom = worldToScreen(bodyPos.x + t.stemThickness / 2, bodyPos.y + t.topThickness / 2 + t.stemHeight);
+      context.beginPath();
+      context.rect(stemTop.x, stemTop.y, (stemBottom.x - stemTop.x), (stemBottom.y - stemTop.y));
+      context.fill();
+      context.stroke();
+    }
+
+    context.restore();
+  }
+
   function drawHud() {
-    const speed = Math.hypot(state.velocity.x, state.velocity.y);
+    const vel = planeBody.getLinearVelocity();
+    const speed = Math.hypot(vel.x, vel.y);
     context.save();
     context.fillStyle = 'rgba(255,255,255,0.9)';
     context.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
     const lines = [
       `Speed: ${speed.toFixed(1)} m/s`,
       `Throttle: ${(state.throttle * 100).toFixed(0)}%`,
-      `Altitude: ${(600 - state.position.y).toFixed(1)} m`,
-      `Angle: ${(state.angle * 180 / Math.PI).toFixed(1)}°`,
+      `Altitude: ${(600 - planeBody.getPosition().y).toFixed(1)} m`,
+      `Angle: ${(planeBody.getAngle() * 180 / Math.PI).toFixed(1)}°`,
       'Controls: Up/Down pitch, +/- throttle, Space stabilize, R reset'
     ];
     let y = 16;
@@ -271,18 +304,37 @@
     context.restore();
   }
 
+  // Fixed time-step for Box2D
   let lastTime = performance.now();
+  let accumulator = 0;
+  const fixedDt = 1 / 60;
   function frame(now) {
-    const dt = Math.min(0.033, Math.max(0.001, (now - lastTime) / 1000));
+    let dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
     lastTime = now;
+    accumulator += dt;
 
-    update(dt);
+    // Update input/forces once per render (minor difference, forces re-applied each step below)
+    updateControlsAndForces(fixedDt);
 
-    // Clear
+    while (accumulator >= fixedDt) {
+      world.step(fixedDt);
+      accumulator -= fixedDt;
+    }
+
+    // Camera follow
+    const pos = planeBody.getPosition();
+    const vel = planeBody.getLinearVelocity();
+    const lead = 2.0;
+    const targetCamX = pos.x + vel.x * lead;
+    const targetCamY = pos.y + vel.y * 0.5;
+    const smooth = 1 - Math.pow(0.001, dt);
+    camera.x += (targetCamX - camera.x) * smooth;
+    camera.y += (targetCamY - camera.y) * smooth;
+
+    // Clear and draw
     context.clearRect(0, 0, canvasWidth, canvasHeight);
-
-    // Draw
     drawBackground();
+    drawGround();
     drawPlane();
     drawHud();
 
