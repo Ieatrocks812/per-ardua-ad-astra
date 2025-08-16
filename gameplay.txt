@@ -1,0 +1,111 @@
+Game Overview
+
+Title (MVP): Per Ardua ad Astra – Battle of Britain
+
+Camera: 2D side-view.
+
+Player Aircraft: Spitfire (single variant for MVP).
+
+Enemies: Bf 109 (fighter), Ju 88 (bomber).
+
+Modes: 7-mission Campaign + Endless Survival.
+
+Narrative: Light character arc with immortal wingman (cannot die in MVP).
+
+Controls (default)
+
+Pitch: A/D (left/right).
+
+Throttle: W/S (up/down).
+
+Roll / Snap invert (optional): F.
+
+Fire: Left Mouse / Space.
+
+Jettison Drop Tank: R.
+
+Physics Requirements
+
+Thrust-to-Weight (TWR): 1.5.
+
+Velocity Integration:
+
+vel += thrustVector * thrust - dragCoeff * vel - gravity (2D).
+
+Clamp top speed by engine tier.
+
+Lift Approximation:
+
+lift = liftCoeff * airspeed * cos(AoA) used to modulate climb/descend feel.
+
+Stall Model:
+
+Track airspeed and angle of attack (AoA).
+
+Stall threshold: airspeed < V_stall && |AoA| > AoA_stall for t_stall >= 0.4s.
+
+Effects: Nose auto-drops, reduced control authority, mild screen shake.
+
+Recovery: Throttle up + nose-down for t_recover ≈ 0.6s.
+
+Fuel: Constant burn; extra capacity if Drop Tank equipped. Jettison removes drag penalty.
+
+Damage Model (Simplified 2D)
+
+Hit Zones (Spitfire & Bf 109):
+
+Engine: speed/climb debuff; smoke; possible flame at low HP.
+
+Wings L/R: roll/turn-rate debuff per wing; visual spark/smoke.
+
+Pilot: incapacitation → mission fail.
+
+Hit Zones (Ju 88):
+
+Engine x2: speed loss; may drop from formation.
+
+Fuselage: overall HP.
+
+Tail Gun Arc: cone-based return fire.
+
+Armor Modifiers: From Armor modification (+/−% damage taken; trade-off with handling).
+
+Weapons & Loadouts
+
+Modifications (pick 1 pre-mission):
+
+8× .303 Browning – high RoF, low damage per bullet.
+
+2× 20mm Hispano + 4× .303 – balanced punch/weight.
+
+4× 20mm Hispano – high damage, heavier handling (−turn rate / +recoil spread).
+
+Armor Options – More Armor (−speed/−turn, +DR) / Less Armor (+speed/+turn, −DR).
+
+Drop Tank – +fuel, +drag until jettison.
+
+Ballistics (abstracted):
+
+Raycast or fast projectile with lifetime clamp.
+
+Per-weapon: rpm, spreadDeg, damage, muzzleVel, recoilKick.
+
+Upgrades (Permanent)
+
+Bubble Canopy: Reduces enemy spotting highlight delay (UI effect).
+
+Pressurized Cockpit: Small high-altitude performance bonus (optional/no-op if altitude not modeled; keep as future hook).
+
+Engine Upgrade (Merlin → Griffon): +top speed, +acceleration, +climb (scalar multipliers).
+
+Passive Ability
+
+Enemy Identification: Tint/outline enemies in red; toggleable when unlocked (Mission 2 reward).
+
+UI/UX
+
+Minimal HUD (airspeed bar, throttle %, ammo, fuel, damage icons by zone, compass bearing, objective markers).
+
+Pre-mission Loadout: choose 1 modification; show purchased upgrades; passive toggle if unlocked.
+
+Debrief: results, tokens earned, damage summary, dialogue.

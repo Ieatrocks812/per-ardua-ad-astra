@@ -1,0 +1,62 @@
+Campaign Flow (7 Missions)
+
+Tutorial / Training – Basic flight & gunnery against dummies; unlock default mod.
+
+Scouting – Light Bf 109 contact; Reward: Enemy Identification passive.
+
+Defense #1 – Intercept Ju 88s + light escort; Reward: 1 upgrade token.
+
+Defense #2 (Ace) – Airfield raid; Bf 109 Ace spawns; Reward: 1 token; special dialogue.
+
+Patrol – Moderate roaming contacts; Reward: 1 token.
+
+Defense #3 – Large bomber group + escorts; Reward: 1 token.
+
+Final Milestone – Battle of Britain Day – Multi-wave defense; campaign end.
+
+Endless Survival Mode
+
+Unlock after campaign. Infinite waves; scaling enemy count/accuracy/formation size. Score = time survived + kills.
+
+Mission Data Schema (JSON)
+
+{
+  "id": "M03_Defense_1",
+  "map": "channel_coast",
+  "win": { "type": "protect", "target": "convoy", "time": 300 },
+  "lose": [ { "type": "player_dead" }, { "type": "time_up_and_convoy_destroyed" } ],
+  "rewards": { "tokens": 1, "passive": null, "mods": [] },
+  "waves": [
+    { "t": 10.0, "group": { "type": "ju88", "n": 3, "from": "E", "alt": "mid", "formation": "V" } },
+    { "t": 12.0, "group": { "type": "bf109", "n": 2, "from": "E", "alt": "high", "escort": "prev" } },
+    { "t": 120.0, "trigger": "reinforce_if_convoy_hp<50%", "group": { "type": "bf109", "n": 2, "from": "NE", "alt": "mid" } }
+  ],
+  "ace": null,
+  "dialogue": {
+    "pre": ["Wingman: Convoy’s making for Dover—keep your eyes peeled."],
+    "mid": ["Wingman: Bombers sighted, two o’clock high!"],
+    "post": ["Wingman: That’ll teach them to bother our lads."]
+  }
+}
+
+Ace Mission Example (JSON)
+
+{
+  "id": "M04_Defense_2_Ace",
+  "map": "home_airfield",
+  "win": { "type": "survive_and_deny_damage", "time": 360 },
+  "lose": [ { "type": "player_dead" } ],
+  "rewards": { "tokens": 1 },
+  "waves": [
+    { "t": 15.0, "group": { "type": "bf109", "n": 3, "from": "E", "alt": "mid" } },
+    { "t": 45.0, "ace": { "type": "bf109", "name": "Black Eagle", "from": "SE", "buff": 0.15 } },
+    { "t": 120.0, "group": { "type": "ju88", "n": 2, "from": "E", "alt": "low", "formation": "line" } }
+  ],
+  "dialogue": {
+    "pre": ["Wingman: Word is the ‘Black Eagle’ is prowling today."],
+    "mid": ["Wingman: He’s on you! I’ll drag him—break!"],
+    "post": ["Wingman: If he bailed, he’ll be back. If not… good riddance."]
+  }
+}
+
+Endless Mode Schema (JSON)

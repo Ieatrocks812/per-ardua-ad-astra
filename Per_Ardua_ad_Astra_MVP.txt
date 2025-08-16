@@ -1,0 +1,218 @@
+1. Overview
+
+This MVP is a short, self-contained version of Per Ardua ad Astra covering the British side of the Battle of Britain, from training to Battle of Britain Day.
+
+Tone: Light character narrative between player and wingman, set against escalating combat.
+
+Scope: One playable aircraft (Spitfire), two enemy aircraft (Bf 109 fighter, Ju 88 bomber).
+
+Physics & Feel: Bit Planes-style side-view combat with inertia and responsive controls, but with stalls possible (Thrust-to-Weight Ratio = 1.5 → stalls rare).
+
+Progression: Bomber Crew-style mission chain with upgrades, modifications, and a single passive ability.
+
+Extra Mode: Endless combat survival after campaign completion.
+---
+
+2. Core Gameplay Loop
+
+Mission Briefing – Story dialogue + mission objectives.
+
+Loadout Selection – Choose one modification, apply any upgrades purchased, equip passive (if unlocked).
+
+Combat Mission – Control the Spitfire in 2D airspace; wingman fights alongside.
+
+Mission Debrief – Results summary, rewards (upgrade tokens), story dialogue.
+
+Progression – Purchase upgrades, unlock modifications, equip passive.
+
+---
+
+3. Player & Wingman
+Player
+
+Aircraft: Spitfire (single type for MVP).
+
+Physics:
+
+Thrust-to-weight ratio: 1.5.
+
+Stall occurs if airspeed < stall threshold for > X seconds, nose drops, control limited until recovery.
+
+No g-force simulation.
+
+Wingman
+
+Character: Named, persistent through all missions, cannot die in MVP.
+
+Behavior:
+
+Algorithmic (not adaptive AI).
+
+Default: flies in formation, breaks off to engage threats, returns to cover player.
+
+Scripted radio chatter (pre/post/mid mission) tied to mission events.
+
+---
+
+4. Mission Structure
+Total Missions: 7
+
+Tutorial / Training – Learn controls, basic dogfighting vs dummy targets.
+
+Scouting – Recon mission; small Bf 109 skirmish. Unlocks Enemy Identification passive.
+
+Defense #1 – Intercept Ju 88s + light fighter escort. Earn 1 upgrade token.
+
+Defense #2 (Ace) – Heavy raid on airfield; Bf 109 Ace appears. Defeating Ace awards 1 upgrade token and special Ace radio line.
+
+Patrol – Low-intensity mission; mixed contacts. Earn 1 upgrade token.
+
+Defense #3 – Large bomber formation + escorts. Earn 1 upgrade token.
+
+Final Milestone – Battle of Britain Day – Large-scale defense, multiple waves. Victory ends campaign.
+
+---
+
+5. Combat & Physics
+Controls
+
+Pitch: A/D or left/right.
+
+Throttle: W/S or up/down.
+
+Roll: Keybind (optional for 2D stall recovery animation). (F key)
+
+Fire Guns: Primary fire button. (space key)
+
+Special: Drop tank jettison. (E key)
+
+Physics: 
+
+Side-view 2D plane with inertia, gravity, drag, and lift simulation.
+
+Stalls possible at low speed + high angle of attack; recovery requires nose-down and throttle.
+
+TWR 1.5 ensures aggressive maneuvering without frequent stalling.
+
+---
+
+6. Aircraft Systems
+Modifications (choose one per mission)
+
+8×.303 Browning – Default; high RoF, low damage.
+
+2×20 mm Hispano + 4×.303 Browning – Balanced firepower.
+
+4×20 mm Hispano – Heavy damage, reduced maneuverability.
+
+Armor Options – More armor (slower, tougher) / Less armor (faster, weaker).
+
+Drop Tanks – Extra fuel, slight drag penalty until jettison.
+
+Upgrades (permanent, purchased with tokens)
+
+Bubble Canopy – Better visibility; reduces enemy spotting delay.
+
+Pressurized Cockpit – Minor high-altitude performance boost.
+
+Engine Upgrade (Merlin → Griffon) – Faster climb and top speed.
+
+Passive Abilities
+
+Enemy Identification – Enemy planes tinted red; unlocked after Mission 2.
+
+---
+
+7. Enemy Aircraft
+
+Bf 109 Fighter
+
+Agile, moderate health, armed with cannons and MGs.
+
+Uses fixed dogfighting behavior: approach, burst fire, break, re-engage.
+
+Ju 88 Bomber
+
+Slow, high health, tail gun arc.
+
+Flies in formations; requires sustained fire to down.
+
+Ace Variant
+
+Bf 109 with higher stats, tighter turns, disciplined burst firing.
+
+---
+
+8. Damage Model (Simplified)
+
+Hit Zones
+
+Engine: Reduces speed, may cause smoke/failure.
+
+Wing L/R: Reduces roll rate and turn.
+
+Pilot: Instant incapacitation (mission fail).
+
+Bomber Engines: Reduce bomber speed, drop from formation.
+
+Effects
+
+Flat damage reduction/bonus from armor mod.
+
+Critical hits trigger smoke/fire particle effects.
+
+---
+
+9. Endless Combat Mode
+
+Unlocks after campaign completion.
+
+Infinite waves with scaling difficulty:
+
+Increase spawn rate, formation size, and enemy accuracy.
+
+Scoreboard for kills, survival time.
+
+Uses same upgrades/mods as campaign.
+
+---
+
+10. Art & Audio Direction (MVP)
+
+Art
+
+2D side-view silhouettes or minimal pixel sprites (64–128px wide).
+
+Distinct shapes for Spitfire, Bf 109, Ju 88.
+
+Visible muzzle flashes, tracers, smoke.
+
+Audio
+
+Looping engine sound per aircraft type.
+
+Single SFX for gunfire, explosions.
+
+Wingman radio chatter as short text + optional voice lines.
+
+---
+
+11. Technical Requirements
+
+Engine: Godot 4 (recommended for speed) or Unity 2D.
+
+Target FPS: 120+ on low-end hardware.
+
+Platform: PC (Steam-ready build).
+
+Data: Missions and upgrades stored in JSON for easy iteration.
+
+12. Development Notes
+
+All enemy and wingman behavior scripted (no dynamic AI learning).
+
+All missions are hand-authored (no procedural campaigns).
+
+Physics tuned for responsiveness; realism is secondary to fun.
+
+Stall is a visible, recoverable event, not an instant loss of control.

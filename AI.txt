@@ -1,0 +1,54 @@
+Philosophy
+
+Algorithmic, not adaptive AI. Scripted states and timers with light randomness. Wingman cannot die.
+
+Shared Behaviors (FSM)
+
+States: FormUp → Engage → Break → Reposition → CoverLeader → RTB (if damaged).
+
+FormUp
+
+Maintain offset from leader (wingman) or formation anchor (enemies).
+
+Engage
+
+If target in cone & range: burst fire; else turn to intercept.
+
+Time-on-target clamp; avoid endless tail-chase by break timer.
+
+Break
+
+Defensive roll/zoom; pick new vector ± random jitter.
+
+Reposition
+
+Climb/extend to regain energy; re-enter from advantaged angle.
+
+CoverLeader (Wingman only)
+
+If player flagged UnderFire: intercept attacker with high priority.
+
+RTB (Wingman only)
+
+If wingman HP < threshold: attempt to disengage and exit map; marked Unavailable next mission at most once; always returns later (cannot die).
+
+Target Selection
+
+Fighters: prioritize player > player’s attacker > nearest threat.
+
+Bombers: prioritize formation leaders/engines; escorts protect bombers.
+
+Ace Behavior (Bf 109)
+
++10–15% stats (speed/turn/accuracy), shorter burst, smarter break timing.
+
+Uses vertical extensions more often; favors head-on denial.
+
+Bomber Formation Logic (Ju 88)
+
+Spawn in V or Line Abreast with interval.
+
+Tail gun fires if attacker within cone & range; cooldown bursts.
+
+Engines disabled reduce group speed; stragglers may fall behind.
+

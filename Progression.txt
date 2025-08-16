@@ -1,0 +1,53 @@
+Currency & Unlocks
+
+Upgrade Tokens: Awarded by missions (typically 1 each for M3–M6, plus Ace bonus if desired). Spent on permanent Upgrades.
+
+Modifications: All available from start or unlocked at specific beats (optional). Only one may be equipped per mission.
+
+Passive: Enemy Identification unlocked after Mission 2.
+
+Upgrades (Permanent, One-time Purchases)
+
+Bubble Canopy – Enemy highlight delay −40%.
+
+Pressurized Cockpit – +5% engine efficiency above high-altitude threshold (stub if altitude disabled).
+
+Engine Upgrade (Merlin → Griffon) – +12% top speed, +15% accel/climb.
+
+Modifications (Per-Mission Choice)
+
+8× .303 – rpm: 1100, damage: 2, spread: 1.3°.
+
+2× 20mm + 4× .303 – rpm: 800/1000, dmg: 8/2, spread: 1.2°.
+
+4× 20mm – rpm: 700, dmg: 8, spread: 1.6°, handling −8%.
+
+Armor (More) – Damage taken −15%, speed −6%, turn −8%.
+
+Armor (Less) – Damage taken +15%, speed +6%, turn +8%.
+
+Drop Tank – Fuel +50%, drag +4% until jettison.
+
+Save Data Sketch
+
+{
+  "campaign": { "lastMission": 5, "endlessUnlocked": false },
+  "upgrades": { "canopy": true, "pressurized": false, "engine": false },
+  "mods": ["8x303", "2x20mm_4x303", "4x20mm", "armor_more", "armor_less", "drop_tank"],
+  "equippedMod": "2x20mm_4x303",
+  "passiveEnemyID": true
+}
+
+UX Flow
+
+Briefing → 2) Loadout (choose mod, view upgrades, passive toggle) → 3) Mission → 4) Debrief (tokens, unlocks) → 5) Upgrades.
+
+Notes
+
+Keep art minimal (silhouettes or low-res pixel); readability over realism.
+
+Wingman cannot die; if critically damaged, exits and sits out next mission at most once.
+
+All AI is state-machine driven with timers and simple heuristics; no learning.
+
+TWR 1.5 with stall model: stalls are possible but rare and recoverable.
