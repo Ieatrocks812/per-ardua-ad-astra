@@ -196,7 +196,9 @@
         bullet: null,
         tracer: null,
         casing: null,
-        loaded: { map: false, tileableMap: false, spitfire: false, spitfireInverted: false, spitfireGear: false, spitfireInvertedGear: false, bullet: false, tracer: false, casing: false }
+        ju88: null,
+        explosion: null,
+        loaded: { map: false, tileableMap: false, spitfire: false, spitfireInverted: false, spitfireGear: false, spitfireInvertedGear: false, bullet: false, tracer: false, casing: false, ju88: false, explosion: false }
       };
       
       async function loadAssets() {
@@ -250,6 +252,16 @@
             '../assets/sprites/effects/casing.png',
             './assets/sprites/effects/casing.png',
             '/assets/sprites/effects/casing.png'
+          ],
+          ju88: [
+            '../assets/sprites/aircraft/enemies/ju88_bomber.png',
+            './assets/sprites/aircraft/enemies/ju88_bomber.png',
+            '/assets/sprites/aircraft/enemies/ju88_bomber.png'
+          ],
+          explosion: [
+            '../assets/sprites/effects/explosion.png',
+            './assets/sprites/effects/explosion.png',
+            '/assets/sprites/effects/explosion.png'
           ]
         };
         
@@ -349,7 +361,9 @@
         inverted: false,
         gearDown: false,
         projectiles: [], // bullets and tracers
-        casings: [] // ejected shells
+        casings: [], // ejected shells
+        enemies: [], // enemy aircraft
+        explosions: [] // explosion effects
       };
       
       // =============================================================================
@@ -457,6 +471,9 @@
       
       createGroundCollision();
       
+      // Create enemy aircraft
+      createEnemies();
+      
       // =============================================================================
       // GUNS AND PROJECTILES
       // =============================================================================
@@ -466,11 +483,161 @@
       const fireRate = 600; // rounds per minute
       const fireInterval = 60000 / fireRate; // ms between shots
       
-      // Projectile size settings (world units - stays same relative to plane/map regardless of zoom)
-      const BULLET_SIZE = 5; // world units
-      const TRACER_LENGTH = 1.0; // world units  
-      const TRACER_WIDTH = 0.1; // world units
-      const CASING_SIZE = 50; // world units
+              // Projectile size settings (world units - stays same relative to plane/map regardless of zoom)
+        const BULLET_SIZE = 5; // world units
+        const TRACER_LENGTH = 1.0; // world units  
+        const TRACER_WIDTH = 0.1; // world units
+        const CASING_SIZE = 50; // world units
+        
+        // =============================================================================
+        // ENEMY SYSTEM
+        // =============================================================================
+        
+        function createEnemies() {
+          console.log('✈️ Creating enemy aircraft...');
+          
+          // Create a line of Ju-88 bombers at 1000m altitude
+          const enemyAltitude = -500; // 1000m above ground in physics units (500 * VISUAL_SCALE = 1000m)
+          const enemySpacing = 200; // 400m apart in world
+          const numEnemies = 10;
+          const startX = -1000; // Start 2000m to the left
+          
+          for (let i = 0; i < numEnemies; i++) {
+            const x = startX + (i * enemySpacing);
+            
+            // Create Box2D body for enemy
+            const enemyBody = world.createBody({
+              type: 'dynamic',
+              position: pl.Vec2(x, enemyAltitude),
+              angle: 0,
+              linearDamping: 0.05,
+              angularDamping: 2.0
+            });
+            
+            enemyBody.createFixture({
+              shape: pl.Box(8, 2), // Larger than player aircraft (16m x 4m)
+              density: 30, // Heavy bomber
+              friction: 0.2,
+              restitution: 0.1
+            });
+            
+            // Enemy data
+            const enemy = {
+              body: enemyBody,
+              health: 10, // Takes 10 hits to destroy
+              maxHealth: 10,
+              speed: 80, // Cruise speed in m/s
+              destroyed: false,
+              thrustDisabled: false,
+              liftDisabled: false,
+              type: 'ju88'
+            };
+            
+            // Store reference in Box2D body for collision detection
+            enemyBody.setUserData({ type: 'enemy', enemy: enemy });
+            
+            game.enemies.push(enemy);
+            console.log(`✈️ Created Ju-88 bomber at (${x}, ${enemyAltitude})`);
+          }
+          
+          console.log(`✈️ Created ${game.enemies.length} enemy aircraft`);
+        }
+        
+        function updateEnemies(dt) {
+          game.enemies.forEach(enemy => {
+            if (enemy.destroyed) return;
+            
+            const pos = enemy.body.getPosition();
+            const vel = enemy.body.getLinearVelocity();
+            
+            // Basic AI: Fly straight at cruise speed unless damaged
+            if (!enemy.thrustDisabled) {
+              const thrust = 40000; // Bomber thrust
+              enemy.body.applyForceToCenter(pl.Vec2(thrust, 0), true);
+            }
+            
+            // Apply lift unless disabled
+            if (!enemy.liftDisabled) {
+              const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+              if (speed > 10) {
+                const lift = 8000; // Bomber lift
+                enemy.body.applyForceToCenter(pl.Vec2(0, lift), true);
+              }
+            }
+            
+            // Apply drag
+            const dragCoeff = 0.02;
+            const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+            const drag = pl.Vec2(-vel.x * dragCoeff * speed, -vel.y * dragCoeff * speed);
+            enemy.body.applyForceToCenter(drag, true);
+          });
+        }
+        
+        function checkProjectileEnemyCollision(proj, projIndex) {
+          game.enemies.forEach(enemy => {
+            if (enemy.destroyed) return;
+            
+            const pos = enemy.body.getPosition();
+            const distance = Math.sqrt(
+              (proj.x - pos.x) * (proj.x - pos.x) + 
+              (proj.y - pos.y) * (proj.y - pos.y)
+            );
+            
+            // Simple collision detection - within 10 physics units (20m)
+            if (distance < 10) {
+              console.log('💥 Projectile hit enemy!', { distance, enemyHealth: enemy.health });
+              
+              // Damage enemy
+              enemy.health--;
+              
+              // Remove projectile
+              game.projectiles.splice(projIndex, 1);
+              
+              // Check if enemy is destroyed
+              if (enemy.health <= 0 && !enemy.destroyed) {
+                destroyEnemy(enemy);
+              } else if (enemy.health <= 5 && !enemy.thrustDisabled) {
+                // Disable thrust when heavily damaged
+                enemy.thrustDisabled = true;
+                console.log('⚠️ Enemy thrust disabled');
+              } else if (enemy.health <= 3 && !enemy.liftDisabled) {
+                // Disable lift when critically damaged
+                enemy.liftDisabled = true;
+                console.log('⚠️ Enemy lift disabled');
+              }
+            }
+          });
+        }
+        
+        function destroyEnemy(enemy) {
+          console.log('💥 Enemy destroyed!');
+          enemy.destroyed = true;
+          
+          const pos = enemy.body.getPosition();
+          
+          // Create explosion effect
+          game.explosions.push({
+            x: pos.x,
+            y: pos.y,
+            time: 0,
+            duration: 1.0, // 1 second explosion
+            size: 20 // 40m explosion diameter
+          });
+          
+          // Remove body from physics world
+          world.destroyBody(enemy.body);
+        }
+        
+        function updateExplosions(dt) {
+          for (let i = game.explosions.length - 1; i >= 0; i--) {
+            const explosion = game.explosions[i];
+            explosion.time += dt;
+            
+            if (explosion.time >= explosion.duration) {
+              game.explosions.splice(i, 1);
+            }
+          }
+        }
       
       function trySpawnGuns() {
         console.log('🔫 trySpawnGuns called');
@@ -544,6 +711,9 @@
         // Update bullets and tracers
         for (let i = game.projectiles.length - 1; i >= 0; i--) {
           const proj = game.projectiles[i];
+          
+          // Check collision with enemies before updating position
+          checkProjectileEnemyCollision(proj, i);
           
           // Apply drag
           const speed = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy);
@@ -1045,6 +1215,87 @@
           ctx.restore();
         });
         
+        // Render enemies
+        game.enemies.forEach(enemy => {
+          if (enemy.destroyed) return;
+          
+          const pos = enemy.body.getPosition();
+          const angle = enemy.body.getAngle();
+          const screenPos = worldToScreen(pos.x, pos.y);
+          
+          ctx.save();
+          ctx.translate(screenPos.x, screenPos.y);
+          ctx.rotate(angle);
+          
+          // Enemy aircraft size
+          const enemyWidth = 16 * SCALE * game.camera.zoom; // 32m wingspan
+          const enemyHeight = 4 * SCALE * game.camera.zoom; // 8m length
+          
+          if (assets.loaded.ju88 && assets.ju88) {
+            // Use Ju-88 sprite
+            ctx.drawImage(assets.ju88, -enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+          } else {
+            // Fallback enemy - dark grey bomber
+            ctx.fillStyle = enemy.health <= 5 ? '#8B0000' : '#444444'; // Red if heavily damaged
+            ctx.fillRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+            
+            // Wing outline
+            ctx.strokeStyle = '#222222';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
+          }
+          
+          // Health bar above enemy
+          const barWidth = enemyWidth;
+          const barHeight = 4;
+          const barY = -enemyHeight/2 - 10;
+          
+          // Background
+          ctx.fillStyle = '#FF0000';
+          ctx.fillRect(-barWidth/2, barY, barWidth, barHeight);
+          
+          // Health
+          const healthRatio = enemy.health / enemy.maxHealth;
+          ctx.fillStyle = healthRatio > 0.5 ? '#00FF00' : (healthRatio > 0.25 ? '#FFFF00' : '#FF0000');
+          ctx.fillRect(-barWidth/2, barY, barWidth * healthRatio, barHeight);
+          
+          ctx.restore();
+        });
+        
+        // Render explosions
+        game.explosions.forEach(explosion => {
+          const screenPos = worldToScreen(explosion.x, explosion.y);
+          const progress = explosion.time / explosion.duration;
+          const size = explosion.size * SCALE * game.camera.zoom * (1 + progress * 2); // Expand over time
+          const alpha = 1 - progress; // Fade out
+          
+          ctx.save();
+          ctx.translate(screenPos.x, screenPos.y);
+          
+          if (assets.loaded.explosion && assets.explosion) {
+            // Use explosion sprite
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(assets.explosion, -size/2, -size/2, size, size);
+          } else {
+            // Fallback explosion - animated fire ball
+            ctx.globalAlpha = alpha;
+            
+            // Outer fire
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size/2);
+            gradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`); // Yellow center
+            gradient.addColorStop(0.3, `rgba(255, 100, 0, ${alpha})`); // Orange
+            gradient.addColorStop(0.7, `rgba(255, 0, 0, ${alpha})`); // Red
+            gradient.addColorStop(1, `rgba(50, 0, 0, 0)`); // Transparent edge
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, size/2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          
+          ctx.restore();
+        });
+        
         // Debug: Draw collision boundaries (press 'C' to toggle)
         if (game.showCollision) {
           ctx.save();
@@ -1111,6 +1362,8 @@
         while (accumulator >= timeStep) {
           updatePhysics(timeStep);
           updateProjectiles(timeStep);
+          updateEnemies(timeStep);
+          updateExplosions(timeStep);
           world.step(timeStep);
           accumulator -= timeStep;
         }
