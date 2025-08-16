@@ -296,7 +296,7 @@
         const originalAspectRatio = sprite.naturalWidth / sprite.naturalHeight;
         let baseEnemySize;
         if (enemy.type === 'bf109') {
-          baseEnemySize = 8; // Smaller fighters
+          baseEnemySize = 16; // Doubled fighter size to match rendering
         } else {
           baseEnemySize = 24; // Larger bombers
         }
@@ -396,6 +396,58 @@
         
         // Consider pixel hit if alpha > threshold (not transparent)
         return alpha > 50; // Threshold for semi-transparent areas
+      }
+
+      // Pixel-perfect plane vs plane overlap test
+      function checkPlanePlanePixelOverlap(enemy) {
+        // Sample a small grid of points around the midpoint between planes
+        const playerPos = aircraft.getPosition();
+        const enemyPos = enemy.body.getPosition();
+        
+        // Estimate sprite world sizes
+        // Player
+        let playerSprite;
+        if (game.inverted && game.gearDown) playerSprite = assets.spitfireInvertedGear;
+        else if (game.inverted && !game.gearDown) playerSprite = assets.spitfireInverted;
+        else if (!game.inverted && game.gearDown) playerSprite = assets.spitfireGear;
+        else playerSprite = assets.spitfire;
+        const basePlayerSize = 0.4;
+        const playerWidth = playerSprite ? playerSprite.naturalWidth * basePlayerSize : 8;
+        const playerHeight = playerSprite ? playerSprite.naturalHeight * basePlayerSize : 3;
+        
+        // Enemy
+        let enemySprite;
+        if (enemy.type === 'bf109') {
+          enemySprite = enemy.facingDirection === 'right' ? assets.bf109Right : assets.bf109Left;
+        } else {
+          enemySprite = assets.ju88;
+        }
+        const enemyAspect = enemySprite ? (enemySprite.naturalWidth / Math.max(1, enemySprite.naturalHeight)) : 3;
+        const enemyBase = enemy.type === 'bf109' ? 16 : 24;
+        const enemyWidth = enemyBase * enemyAspect;
+        const enemyHeight = enemyBase;
+        
+        // Define sampling region around the segment midpoint
+        const midX = (playerPos.x + enemyPos.x) / 2;
+        const midY = (playerPos.y + enemyPos.y) / 2;
+        const sampleHalfW = Math.min(playerWidth, enemyWidth) * 0.6;
+        const sampleHalfH = Math.min(playerHeight, enemyHeight) * 0.6;
+        
+        // Sample a coarse grid (7x7) for overlap
+        const samples = 7;
+        for (let ix = 0; ix < samples; ix++) {
+          for (let iy = 0; iy < samples; iy++) {
+            const tx = ix / (samples - 1); // 0..1
+            const ty = iy / (samples - 1);
+            const wx = midX + (tx - 0.5) * 2 * sampleHalfW;
+            const wy = midY + (ty - 0.5) * 2 * sampleHalfH;
+            // Both must have opaque pixel at this world point
+            if (checkPlayerPixelCollision(wx, wy) && checkPixelCollision(wx, wy, enemy)) {
+              return true;
+            }
+          }
+        }
+        return false;
       }
       
       // Create audio sounds programmatically
@@ -840,8 +892,8 @@
       
               // Projectile size settings (world units - stays same relative to plane/map regardless of zoom)
         const BULLET_SIZE = 5; // world units
-        const TRACER_LENGTH = 1.0; // world units  
-        const TRACER_WIDTH = 0.1; // world units
+        const TRACER_LENGTH = 2.0; // world units - doubled for longer tracers
+        const TRACER_WIDTH = 0.2; // world units - doubled for thicker tracers
         const CASING_SIZE = 3; // world units (much smaller casings)
         
         // =============================================================================
@@ -926,7 +978,16 @@
               targetAltitude: y, // Store initial altitude to maintain level flight
               smoking: false, // Visual damage indicator
               onFire: false, // Critical damage indicator
-              pitchingDown: false // Crash state
+                pitchingDown: false, // Crash state
+                // Defensive gunner
+                hasGunner: true,
+                gunnerLastShotTime: 0,
+                gunnerBurstRemaining: 0,
+                gunnerBurstSize: 5,
+                gunnerShotInterval: 150, // Slower fire rate than fighters
+                gunnerBurstCooldown: 2000, // 2 seconds between bursts
+                gunnerLastBurstTime: 0,
+                gunnerRange: 100 // 200m defensive range
             };
             
             // Store reference for collision detection
@@ -963,7 +1024,7 @@
               restitution: 0.1
             });
             
-            // BF-109 escort data
+            // BF-109 escort data with enhanced AI
             const escort = {
               body: escortBody,
               health: 3, // Lower health than bombers
@@ -980,12 +1041,39 @@
               smoking: false,
               onFire: false,
               pitchingDown: false,
-              // Combat AI state
-              mode: 'escort', // escort, chase, attack
+              // Enhanced Combat AI state machine
+              aiState: 'patrol', // patrol, engage, attack, evade, boom_zoom, disengage
+              previousState: 'patrol',
+              stateTimer: 0,
               target: null, // Target for attack
               lastShotTime: 0,
-              shotInterval: 200 + Math.random() * 300, // 200-500ms between shots
-              facingDirection: 'left' // Track which sprite to use
+              burstShotsRemaining: 0,
+              burstCooldown: 0,
+              shotInterval: 100, // 100ms between shots in a burst
+              burstSize: 3 + Math.floor(Math.random() * 3), // 3-5 shot bursts
+              burstCooldownTime: 1000 + Math.random() * 1000, // 1-2s between bursts
+              facingDirection: 'left', // Track which sprite to use
+              // Advanced AI parameters
+              skillLevel: Math.random() > 0.8 ? 'ace' : 'regular', // 20% chance of ace pilot
+              aggressiveness: 0.5 + Math.random() * 0.5, // 0.5-1.0 aggression factor
+              reactionTime: 200 + Math.random() * 300, // 200-500ms reaction delay
+              lastReactionUpdate: 0,
+              // Maneuver tracking
+              currentManeuver: null,
+              maneuverTimer: 0,
+              preferredEngagementRange: 50 + Math.random() * 50, // 100-200m preferred combat range
+              // Energy management
+              energyState: 'neutral', // low, neutral, high
+              lastEnergyCheck: 0,
+              // Evasion tracking
+              timeSinceLastHit: 0,
+              consecutiveHits: 0,
+              isEvading: false,
+              evasionDirection: 1, // 1 or -1 for roll direction
+              // Tactical awareness
+              lastKnownPlayerPos: null,
+              predictedPlayerPos: null,
+              leadCalculation: null
             };
             
             // Store reference for collision detection
@@ -1046,6 +1134,73 @@
           }
         }
         
+        // Function to make enemy aircraft fire their weapons
+        function fireEnemyWeapon(enemy) {
+          const pos = enemy.body.getPosition();
+          const vel = enemy.body.getLinearVelocity();
+          const angle = enemy.body.getAngle();
+          
+          // Calculate gun position (forward of enemy aircraft)
+          const gunForward = 2.0;
+          const gunPos = {
+            x: pos.x + Math.cos(angle) * gunForward,
+            y: pos.y + Math.sin(angle) * gunForward
+          };
+          
+          // Calculate bullet velocity with lead prediction
+          const playerPos = aircraft.getPosition();
+          const playerVel = aircraft.getLinearVelocity();
+          const distance = Math.sqrt(
+            (playerPos.x - pos.x) * (playerPos.x - pos.x) + 
+            (playerPos.y - pos.y) * (playerPos.y - pos.y)
+          );
+          
+          // Lead calculation for ace pilots
+          let leadFactor = 0;
+          if (enemy.skillLevel === 'ace') {
+            const bulletSpeed = 400; // m/s
+            const timeToTarget = distance / bulletSpeed;
+            leadFactor = timeToTarget * 0.5; // Aces lead shots better
+          }
+          
+          // Calculate firing angle with lead
+          const predictedX = playerPos.x + playerVel.x * leadFactor;
+          const predictedY = playerPos.y + playerVel.y * leadFactor;
+          const firingAngle = Math.atan2(predictedY - pos.y, predictedX - pos.x);
+          
+          // Add some spread/inaccuracy (less for aces)
+          const spread = enemy.skillLevel === 'ace' ? 0.02 : 0.05;
+          const actualAngle = firingAngle + (Math.random() - 0.5) * spread;
+          
+          // Muzzle velocity
+          const muzzleVelocity = 400;
+          const bulletVel = {
+            x: vel.x + Math.cos(actualAngle) * muzzleVelocity,
+            y: vel.y + Math.sin(actualAngle) * muzzleVelocity
+          };
+          
+          // Create enemy projectile
+          if (!game.enemyProjectiles) {
+            game.enemyProjectiles = [];
+          }
+          
+          game.enemyProjectiles.push({
+            x: gunPos.x,
+            y: gunPos.y,
+            vx: bulletVel.x,
+            vy: bulletVel.y,
+            type: Math.random() < 0.25 ? 'tracer' : 'bullet', // 25% tracers
+            life: 3.0, // 3 seconds max flight time
+            initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y),
+            owner: enemy // Track who fired it
+          });
+          
+          // Play enemy gunfire sound (quieter than player)
+          if (sounds.gunfire) {
+            playSound(sounds.gunfire, 0.15);
+          }
+        }
+        
         function updateEnemies(dt) {
           game.enemies.forEach(enemy => {
             if (enemy.destroyed && !enemy.pitchingDown) return; // Allow crashing aircraft to continue updating
@@ -1055,55 +1210,313 @@
             const angle = enemy.body.getAngle();
             const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
             
-            // AI behavior for BF-109 fighters
+            // Enhanced AI behavior for BF-109 fighters
             if (enemy.type === 'bf109') {
+              const playerPos = aircraft.getPosition();
+              const playerVel = aircraft.getLinearVelocity();
+              const distanceToPlayer = Math.sqrt(
+                (pos.x - playerPos.x) * (pos.x - playerPos.x) + 
+                (pos.y - playerPos.y) * (pos.y - playerPos.y)
+              );
+              
+              // Update reaction timer
+              const now = performance.now();
+              enemy.stateTimer += dt;
+              enemy.timeSinceLastHit += dt;
+              
+              // Energy state assessment
+              if (now - enemy.lastEnergyCheck > 1000) {
+                const altitude = -pos.y * VISUAL_SCALE;
+                const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y) * VISUAL_SCALE;
+                const totalEnergy = altitude + (speed * speed) / (2 * 9.81);
+                
+                if (totalEnergy < 500) enemy.energyState = 'low';
+                else if (totalEnergy > 1500) enemy.energyState = 'high';
+                else enemy.energyState = 'neutral';
+                
+                enemy.lastEnergyCheck = now;
+              }
+              
+              // Check for coordinated attacks with other fighters
+              let nearbyAllies = [];
+              if (enemy.aiState === 'engage' || enemy.aiState === 'attack') {
+                nearbyAllies = game.enemies.filter(other => 
+                  other !== enemy && 
+                  other.type === 'bf109' && 
+                  !other.destroyed &&
+                  Math.sqrt((other.body.getPosition().x - pos.x) ** 2 + 
+                           (other.body.getPosition().y - pos.y) ** 2) < 100
+                );
+              }
+              
+              // State machine transitions
+              switch(enemy.aiState) {
+                case 'patrol':
+                  // Patrol: Stay with formation, scan for threats
+                  if (distanceToPlayer < 200) { // 400m detection range
+                    enemy.aiState = 'engage';
+                    enemy.stateTimer = 0;
+                    enemy.target = aircraft;
+                    
+                    // Coordinate attack if allies nearby
+                    if (nearbyAllies.length > 0) {
+                      // One attacks from above, one from below
+                      const attackFromAbove = nearbyAllies.filter(a => a.aiState !== 'attack').length % 2 === 0;
+                      enemy.preferredEngagementRange = attackFromAbove ? 75 : 50;
+                      enemy.targetAltitude = playerPos.y + (attackFromAbove ? -50 : 50);
+                      console.log(`🎯 ${enemy.skillLevel === 'ace' ? '⭐ Ace' : '✈️'} BF-109 engaging (coordinated ${attackFromAbove ? 'high' : 'low'})!`);
+                    } else {
+                      console.log(`🎯 ${enemy.skillLevel === 'ace' ? '⭐ Ace' : '✈️'} BF-109 engaging!`);
+                    }
+                  }
+                  enemy.targetSpeed = 100;
+                  enemy.facingDirection = 'left';
+                  break;
+                  
+                case 'engage':
+                  // Engage: Position for attack
+                  if (distanceToPlayer > 300) {
+                    enemy.aiState = 'patrol';
+                    enemy.stateTimer = 0;
+                    console.log('✈️ BF-109 disengaging - target too far');
+                  } else if (distanceToPlayer < enemy.preferredEngagementRange && enemy.stateTimer > enemy.reactionTime / 1000) {
+                    // Check if we have a good attack angle
+                    const angleToPlayer = Math.atan2(playerPos.y - pos.y, playerPos.x - pos.x);
+                const currentAngle = enemy.body.getAngle();
+                    let angleDiff = Math.abs(angleToPlayer - currentAngle);
+                    while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - 2 * Math.PI);
+                    
+                    // Coordinate timing with allies
+                    let shouldAttack = angleDiff < Math.PI / 6; // Within 30 degrees
+                    if (shouldAttack && nearbyAllies.length > 0) {
+                      // Stagger attacks - don't all attack at once
+                      const attackingAllies = nearbyAllies.filter(a => a.aiState === 'attack');
+                      if (attackingAllies.length > 0 && enemy.skillLevel !== 'ace') {
+                        shouldAttack = false; // Wait for ally to finish unless we're an ace
+                      }
+                    }
+                    
+                    if (shouldAttack) {
+                      enemy.aiState = 'attack';
+                      enemy.stateTimer = 0;
+                      enemy.burstShotsRemaining = enemy.burstSize;
+                      console.log(`🔫 ${nearbyAllies.length > 0 ? '🤝 Coordinated' : ''} BF-109 has firing solution!`);
+                    }
+                  }
+                  
+                  // Calculate intercept course with lead
+                  const timeToIntercept = distanceToPlayer / 150; // Rough estimate
+                  const predictedX = playerPos.x + playerVel.x * timeToIntercept * 0.3; // Partial lead
+                  const predictedY = playerPos.y + playerVel.y * timeToIntercept * 0.3;
+                  enemy.predictedPlayerPos = { x: predictedX, y: predictedY };
+                  
+                  const angleToIntercept = Math.atan2(predictedY - pos.y, predictedX - pos.x);
+                  const currentAngle = enemy.body.getAngle();
+                  let angleDiff = angleToIntercept - currentAngle;
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                
+                  // Ace pilots turn faster
+                  const turnRate = enemy.skillLevel === 'ace' ? 30000 : 20000;
+                  enemy.body.applyTorque(angleDiff * turnRate, true);
+                  enemy.facingDirection = Math.cos(angleToIntercept) > 0 ? 'right' : 'left';
+                  enemy.targetSpeed = 140;
+                  break;
+                  
+                case 'attack':
+                  // Attack: Fire weapons at target
+                  if (distanceToPlayer > enemy.preferredEngagementRange * 2 || enemy.burstShotsRemaining <= 0) {
+                    // Exit attack, decide next action
+                    if (enemy.energyState === 'low' || enemy.consecutiveHits > 2) {
+                      enemy.aiState = 'evade';
+                      enemy.evasionDirection = Math.random() > 0.5 ? 1 : -1;
+                    } else if (enemy.energyState === 'high' && enemy.skillLevel === 'ace') {
+                      enemy.aiState = 'boom_zoom';
+                    } else {
+                      enemy.aiState = 'engage';
+                    }
+                    enemy.stateTimer = 0;
+                    enemy.burstCooldown = enemy.burstCooldownTime;
+                  }
+                  
+                  // Fire weapons during attack
+                  if (enemy.burstShotsRemaining > 0 && now - enemy.lastShotTime > enemy.shotInterval) {
+                    fireEnemyWeapon(enemy);
+                    enemy.burstShotsRemaining--;
+                    enemy.lastShotTime = now;
+                  }
+                  
+                  // Continue tracking target
+                  const attackAngle = Math.atan2(playerPos.y - pos.y, playerPos.x - pos.x);
+                  const currAngle = enemy.body.getAngle();
+                  let aDiff = attackAngle - currAngle;
+                  while (aDiff > Math.PI) aDiff -= 2 * Math.PI;
+                  while (aDiff < -Math.PI) aDiff += 2 * Math.PI;
+                  
+                  enemy.body.applyTorque(aDiff * 25000, true);
+                  enemy.facingDirection = Math.cos(attackAngle) > 0 ? 'right' : 'left';
+                  enemy.targetSpeed = 160; // Full speed during attack
+                  break;
+                  
+                case 'evade':
+                  // Evade: Defensive maneuvers
+                  if (enemy.stateTimer > 2) { // Evade for 2 seconds
+                    enemy.aiState = 'engage';
+                    enemy.stateTimer = 0;
+                    enemy.isEvading = false;
+                    enemy.consecutiveHits = 0;
+                  }
+                  
+                  // Barrel roll evasion
+                  const rollAngle = angle + enemy.evasionDirection * Math.sin(enemy.stateTimer * 10) * 0.5;
+                  enemy.body.setAngle(rollAngle);
+                  
+                  // Dive or climb based on energy state
+                  if (enemy.energyState === 'high') {
+                    enemy.targetAltitude = pos.y + 50; // Dive
+                    enemy.targetSpeed = 180;
+              } else {
+                    enemy.targetAltitude = pos.y - 30; // Gentle climb
+                    enemy.targetSpeed = 90;
+                  }
+                  break;
+                  
+                case 'boom_zoom':
+                  // Boom and Zoom: High speed attack from altitude
+                  if (enemy.stateTimer < 1.5) {
+                    // Climb phase
+                    enemy.targetAltitude = pos.y - 100;
+                    enemy.targetSpeed = 100;
+                  } else if (enemy.stateTimer < 3) {
+                    // Dive attack phase
+                    const diveAngle = Math.atan2(playerPos.y - pos.y, playerPos.x - pos.x);
+                    const cAngle = enemy.body.getAngle();
+                    let dDiff = diveAngle - cAngle;
+                    while (dDiff > Math.PI) dDiff -= 2 * Math.PI;
+                    while (dDiff < -Math.PI) dDiff += 2 * Math.PI;
+                    
+                    enemy.body.applyTorque(dDiff * 30000, true);
+                    enemy.targetSpeed = 200; // Maximum speed
+                    enemy.targetAltitude = playerPos.y;
+                    
+                    // Fire if in range
+                    if (distanceToPlayer < 75 && Math.abs(dDiff) < Math.PI / 8) {
+                      if (now - enemy.lastShotTime > enemy.shotInterval) {
+                        fireEnemyWeapon(enemy);
+                        enemy.lastShotTime = now;
+                      }
+                    }
+                  } else {
+                    // Exit boom and zoom
+                    enemy.aiState = 'engage';
+                    enemy.stateTimer = 0;
+                  }
+                  enemy.facingDirection = Math.cos(angle) > 0 ? 'right' : 'left';
+                  break;
+                  
+                case 'disengage':
+                  // Disengage: Break off and retreat
+                enemy.targetSpeed = 120;
+                  enemy.targetAltitude = pos.y - 50; // Climb away
+                  const escapeAngle = Math.atan2(pos.y - playerPos.y, pos.x - playerPos.x);
+                  enemy.body.setAngle(escapeAngle);
+                  enemy.facingDirection = Math.cos(escapeAngle) > 0 ? 'right' : 'left';
+                  
+                  if (distanceToPlayer > 400 || enemy.stateTimer > 5) {
+                    enemy.aiState = 'patrol';
+                    enemy.stateTimer = 0;
+                  }
+                  break;
+                  
+                default:
+                  // Fallback to patrol if unknown state
+                  enemy.aiState = 'patrol';
+                  break;
+              }
+              
+              // Update burst cooldown
+              if (enemy.burstCooldown > 0) {
+                enemy.burstCooldown -= dt * 1000;
+              }
+              
+              // Ace pilot bonuses
+              if (enemy.skillLevel === 'ace') {
+                enemy.targetSpeed *= 1.15; // 15% speed bonus
+                // Aces also get better turn rates and reaction times (already implemented above)
+              }
+            } else if (enemy.type === 'ju88' && enemy.hasGunner && !enemy.destroyed) {
+              // Ju-88 bomber defensive gunner behavior
               const playerPos = aircraft.getPosition();
               const distanceToPlayer = Math.sqrt(
                 (pos.x - playerPos.x) * (pos.x - playerPos.x) + 
                 (pos.y - playerPos.y) * (pos.y - playerPos.y)
               );
               
-              // Switch to chase mode if player is within 300m (150 physics units)
-              if (distanceToPlayer < 150 && enemy.mode === 'escort') {
-                enemy.mode = 'chase';
-                console.log('🎯 BF-109 engaging player!');
-              }
+              const now = performance.now();
               
-              // Return to escort if player escapes far enough (500m)
-              if (distanceToPlayer > 250 && enemy.mode === 'chase') {
-                enemy.mode = 'escort';
-                console.log('✈️ BF-109 returning to escort');
-              }
-              
-              // Chase behavior
-              if (enemy.mode === 'chase') {
-                // Calculate angle to player
-                const angleToPlayer = Math.atan2(
-                  playerPos.y - pos.y,
-                  playerPos.x - pos.x
-                );
+              // Check if player is within gunner range and behind bomber
+              if (distanceToPlayer < enemy.gunnerRange) {
+                const angleToPlayer = Math.atan2(playerPos.y - pos.y, playerPos.x - pos.x);
+                const bomberAngle = enemy.body.getAngle();
                 
-                // Turn toward player
-                const currentAngle = enemy.body.getAngle();
-                let angleDiff = angleToPlayer - currentAngle;
+                // Calculate relative angle (0 = directly ahead, PI = directly behind)
+                let relativeAngle = angleToPlayer - bomberAngle;
+                while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
+                while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
                 
-                // Normalize angle difference
-                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                // Tail gunner covers rear 120 degree arc
+                const inTailGunnerArc = Math.abs(relativeAngle) > 2 * Math.PI / 3;
                 
-                // Apply turning torque
-                const turnTorque = angleDiff * 20000;
-                enemy.body.applyTorque(turnTorque, true);
-                
-                // Update facing direction for sprite
-                enemy.facingDirection = Math.cos(angleToPlayer) > 0 ? 'right' : 'left';
-                
-                // Increase thrust when chasing
-                enemy.targetSpeed = 150; // Faster when chasing
-              } else {
-                // Normal escort behavior
-                enemy.targetSpeed = 120;
-                enemy.facingDirection = 'left'; // Default facing left
+                if (inTailGunnerArc) {
+                  // Start burst if cooldown expired
+                  if (enemy.gunnerBurstRemaining <= 0 && now - enemy.gunnerLastBurstTime > enemy.gunnerBurstCooldown) {
+                    enemy.gunnerBurstRemaining = enemy.gunnerBurstSize;
+                    enemy.gunnerLastBurstTime = now;
+                    console.log('🔫 Ju-88 tail gunner opening fire!');
+                  }
+                  
+                  // Fire if we have shots remaining in burst
+                  if (enemy.gunnerBurstRemaining > 0 && now - enemy.gunnerLastShotTime > enemy.gunnerShotInterval) {
+                    // Create defensive gunfire
+                    const gunPos = {
+                      x: pos.x - Math.cos(bomberAngle) * 5, // Tail position
+                      y: pos.y - Math.sin(bomberAngle) * 5
+                    };
+                    
+                    // Less accurate than fighter guns
+                    const spread = 0.1;
+                    const firingAngle = angleToPlayer + (Math.random() - 0.5) * spread;
+                    
+                    const muzzleVelocity = 350; // Slower than fighter guns
+                    const bulletVel = {
+                      x: vel.x + Math.cos(firingAngle) * muzzleVelocity,
+                      y: vel.y + Math.sin(firingAngle) * muzzleVelocity
+                    };
+                    
+                    if (!game.enemyProjectiles) {
+                      game.enemyProjectiles = [];
+                    }
+                    
+                    game.enemyProjectiles.push({
+                      x: gunPos.x,
+                      y: gunPos.y,
+                      vx: bulletVel.x,
+                      vy: bulletVel.y,
+                      type: 'bullet',
+                      life: 2.0, // Shorter range
+                      initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y),
+                      owner: enemy
+                    });
+                    
+                    enemy.gunnerBurstRemaining--;
+                    enemy.gunnerLastShotTime = now;
+                    
+                    // Play gunfire sound
+                    if (sounds.gunfire) {
+                      playSound(sounds.gunfire, 0.1);
+                    }
+                  }
+                }
               }
             }
             
@@ -1231,6 +1644,26 @@
               
               // Remove projectile
               game.projectiles.splice(projIndex, 1);
+              
+              // Trigger evasive action for intelligent enemies
+              if (enemy.type === 'bf109' && !enemy.destroyed) {
+                enemy.consecutiveHits++;
+                enemy.timeSinceLastHit = 0;
+                
+                // Immediate evasion if taking fire
+                if (enemy.aiState !== 'evade' && enemy.aiState !== 'boom_zoom') {
+                  // Higher chance to evade if damaged or ace pilot
+                  const evasionChance = enemy.skillLevel === 'ace' ? 0.8 : 0.6;
+                  if (Math.random() < evasionChance || enemy.health <= 1) {
+                    enemy.previousState = enemy.aiState;
+                    enemy.aiState = 'evade';
+                    enemy.stateTimer = 0;
+                    enemy.evasionDirection = Math.random() > 0.5 ? 1 : -1;
+                    enemy.isEvading = true;
+                    console.log(`💨 ${enemy.skillLevel === 'ace' ? '⭐ Ace' : '✈️'} BF-109 taking evasive action!`);
+                  }
+                }
+              }
               
               // Progressive damage system with realistic crash physics
               if (enemy.health <= 0 && !enemy.destroyed) {
@@ -1524,14 +1957,20 @@
         const isAircraftB = bodyB === aircraft;
         const enemyDataA = bodyA.getUserData();
         const enemyDataB = bodyB.getUserData();
-        const enemyA = enemyDataA?.type === 'enemy' ? enemyDataA.enemy : null;
-        const enemyB = enemyDataB?.type === 'enemy' ? enemyDataB.enemy : null;
+        const enemyFromA = enemyDataA?.type === 'enemy' ? enemyDataA.enemy : null;
+        const enemyFromB = enemyDataB?.type === 'enemy' ? enemyDataB.enemy : null;
         
-        if ((isAircraftA && enemyB) || (isAircraftB && enemyA)) {
-          const enemy = enemyA || enemyB;
+        if ((isAircraftA && enemyFromB) || (isAircraftB && enemyFromA)) {
+          const enemy = enemyFromA || enemyFromB;
           
           if (!enemy.destroyed) {
             console.log('✈️💥 Mid-air collision with enemy!');
+            
+            // Pixel-perfect verification: only collide if opaque pixels overlap
+            if (!checkPlanePlanePixelOverlap(enemy)) {
+              // Ignore false positives from broad-phase contact
+              return;
+            }
             
             // Major damage to both aircraft
             game.crashed = true;
@@ -1609,11 +2048,11 @@
         }
         
         // Check if enemy aircraft hit ground
-        const enemyA = bodyA.getUserData()?.type === 'enemy' ? bodyA : null;
-        const enemyB = bodyB.getUserData()?.type === 'enemy' ? bodyB : null;
+        const enemyBodyA = bodyA.getUserData()?.type === 'enemy' ? bodyA : null;
+        const enemyBodyB = bodyB.getUserData()?.type === 'enemy' ? bodyB : null;
         
-        if (enemyA || enemyB) {
-          const enemyBody = enemyA || enemyB;
+        if (enemyBodyA || enemyBodyB) {
+          const enemyBody = enemyBodyA || enemyBodyB;
           const enemy = enemyBody.getUserData().enemy;
           
           if (enemy && !enemy.destroyed) {
@@ -2028,16 +2467,37 @@
           if (proj.type === 'tracer') {
             // Tracer gets smaller as it slows down, but maintains world scale
             const speedRatio = speed / proj.initialSpeed;
-            const tracerLength = TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom;
-            const tracerWidth = TRACER_WIDTH * speedRatio * SCALE * game.camera.zoom;
+            const sizeMultiplier = 1.3; // 1.3x size increase as requested
+            const tracerLength = TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom * sizeMultiplier;
+            const tracerWidth = TRACER_WIDTH * speedRatio * SCALE * game.camera.zoom * sizeMultiplier;
+            
+            // Bright yellow tracer with glow effect
+            ctx.shadowColor = '#FFFF00';
+            ctx.shadowBlur = 8 * game.camera.zoom;
             
             if (assets.loaded.tracer && assets.tracer) {
+              // Apply yellow tint to sprite
+              ctx.globalCompositeOperation = 'screen';
+              ctx.fillStyle = '#FFFF00';
+              ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
+              ctx.globalCompositeOperation = 'source-over';
               ctx.drawImage(assets.tracer, -tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
             } else {
-              // Fallback tracer - bright orange/yellow
-              ctx.fillStyle = `rgba(255, 165, 0, ${Math.max(0.6, 0.9 * speedRatio)})`;
+              // Fallback tracer - bright yellow with gradient
+              const gradient = ctx.createLinearGradient(-tracerLength/2, 0, tracerLength/2, 0);
+              gradient.addColorStop(0, `rgba(255, 255, 100, ${Math.max(0.4, 0.6 * speedRatio)})`);
+              gradient.addColorStop(0.5, `rgba(255, 255, 0, ${Math.max(0.8, 1.0 * speedRatio)})`);
+              gradient.addColorStop(1, `rgba(255, 255, 200, ${Math.max(0.4, 0.6 * speedRatio)})`);
+              ctx.fillStyle = gradient;
               ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
+              
+              // Add bright core
+              ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.6, 0.9 * speedRatio)})`;
+              ctx.fillRect(-tracerLength/4, -tracerWidth/4, tracerLength/2, tracerWidth/2);
             }
+            
+            // Reset shadow
+            ctx.shadowBlur = 0;
           } else {
             // Regular bullet - world scale
             const bulletSize = BULLET_SIZE * SCALE * game.camera.zoom;
@@ -2113,22 +2573,43 @@
               const aspectRatio = sprite.naturalWidth / sprite.naturalHeight;
               const width = baseSize * aspectRatio;
               const height = baseSize;
+              
+              // Add golden glow for ace pilots
+              if (enemy.skillLevel === 'ace' && !enemy.destroyed) {
+                ctx.shadowColor = '#FFD700';
+                ctx.shadowBlur = 10 * game.camera.zoom;
+                ctx.globalAlpha = 0.9;
+              }
+              
               ctx.drawImage(sprite, -width/2, -height/2, width, height);
+              
+              // Reset shadow and alpha
+              ctx.shadowBlur = 0;
+              ctx.globalAlpha = 1.0;
             } else {
               // Fallback BF-109 - smaller grey fighter
               let baseColor = '#666666';
               if (enemy.onFire) baseColor = '#8B0000';
               else if (enemy.smoking) baseColor = '#808080';
+              else if (enemy.skillLevel === 'ace') baseColor = '#444499'; // Ace pilots get blue tint
               
               ctx.fillStyle = baseColor;
               const width = baseSize * 1.5; // Fighter aspect ratio
               const height = baseSize;
               ctx.fillRect(-width/2, -height/2, width, height);
               
-              // Fighter outline
-              ctx.strokeStyle = '#333333';
-              ctx.lineWidth = 1;
+              // Fighter outline (gold for aces)
+              ctx.strokeStyle = enemy.skillLevel === 'ace' ? '#FFD700' : '#333333';
+              ctx.lineWidth = enemy.skillLevel === 'ace' ? 2 : 1;
               ctx.strokeRect(-width/2, -height/2, width, height);
+            }
+            
+            // Add ace indicator star
+            if (enemy.skillLevel === 'ace' && !enemy.destroyed) {
+              ctx.fillStyle = '#FFD700';
+              ctx.font = `${8 * game.camera.zoom}px Arial`;
+              ctx.textAlign = 'center';
+              ctx.fillText('⭐', 0, -baseSize);
             }
           } else {
             // Ju-88 rendering (existing code)
@@ -2227,10 +2708,36 @@
             ctx.translate(screenPos.x, screenPos.y);
             ctx.rotate(angle);
             
+            if (proj.type === 'tracer') {
+              // Enemy tracers - also bright yellow but slightly different
+              const speedRatio = speed / proj.initialSpeed;
+              const sizeMultiplier = 1.3; // Same size increase
+              const tracerLength = TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom * sizeMultiplier * 0.8; // Slightly smaller than player
+              const tracerWidth = TRACER_WIDTH * speedRatio * SCALE * game.camera.zoom * sizeMultiplier * 0.8;
+              
+              // Yellow-orange tracer with glow
+              ctx.shadowColor = '#FFAA00';
+              ctx.shadowBlur = 6 * game.camera.zoom;
+              
+              // Gradient for enemy tracers
+              const gradient = ctx.createLinearGradient(-tracerLength/2, 0, tracerLength/2, 0);
+              gradient.addColorStop(0, `rgba(255, 200, 0, ${Math.max(0.4, 0.6 * speedRatio)})`);
+              gradient.addColorStop(0.5, `rgba(255, 255, 0, ${Math.max(0.8, 1.0 * speedRatio)})`);
+              gradient.addColorStop(1, `rgba(255, 200, 0, ${Math.max(0.4, 0.6 * speedRatio)})`);
+              ctx.fillStyle = gradient;
+              ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
+              
+              // Add bright core
+              ctx.fillStyle = `rgba(255, 255, 200, ${Math.max(0.6, 0.9 * speedRatio)})`;
+              ctx.fillRect(-tracerLength/4, -tracerWidth/4, tracerLength/2, tracerWidth/2);
+              
+              ctx.shadowBlur = 0;
+            } else {
             // Enemy bullets - red colored
             const bulletSize = 3 * SCALE * game.camera.zoom;
             ctx.fillStyle = '#FF4444'; // Red enemy bullets
             ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
+            }
             
             ctx.restore();
           });
