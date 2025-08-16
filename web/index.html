@@ -67,11 +67,13 @@
       const ctx = canvas.getContext('2d');
       const pl = window.planck;
       
-      // Constants
-      const SCALE = 20; // pixels per meter
-      const WORLD_WIDTH = 4000; // meters
-      const WORLD_HEIGHT = 3000; // meters
-      const MAP_BOTTOM_ALTITUDE = 600; // bottom of map is 600 m above ground (ground at 0 m)
+      // Constants - Physics world scaling for higher speeds
+      const PHYSICS_SCALE = 0.1; // Physics objects are 10x smaller for higher speeds
+      const VISUAL_SCALE = 10.0; // Visual rendering compensates with 10x scaling
+      const SCALE = 20 * VISUAL_SCALE; // Base pixels per meter (200 after scaling)
+      const WORLD_WIDTH = 4000 * PHYSICS_SCALE; // Physics: 400 units (visually 4000m)
+      const WORLD_HEIGHT = 3000 * PHYSICS_SCALE; // Physics: 300 units (visually 3000m)
+      const MAP_BOTTOM_ALTITUDE = 60; // Physics: 60 units above ground (visually 600m)
       
       // Physics world
       const world = new pl.World(pl.Vec2(0, 9.81));
@@ -312,17 +314,17 @@
       // PHYSICS
       // =============================================================================
       
-      // Create aircraft - spawn above ground within main map (y increases downward)
+      // Create aircraft - spawn above ground within main map (scaled physics)
       const aircraft = world.createBody({
         type: 'dynamic',
-        position: pl.Vec2(0, -600), // 600 m above ground level (y=0)
+        position: pl.Vec2(0, -60), // 60 physics units above ground (visually 600m)
         angle: 0,
         linearDamping: 0.02, // Reduced from 0.1 for higher top speeds
         angularDamping: 2.5 // High damping for instant pitch stop when controls released
       });
       
       aircraft.createFixture({
-        shape: pl.Box(8, 2.5), // 16m x 5m aircraft
+        shape: pl.Box(0.8, 0.25), // 1.6m x 0.5m aircraft (scaled down 10x)
         density: 20, // kg/m²
         friction: 0.3,
         restitution: 0.1
@@ -332,10 +334,10 @@
       const groundBodies = [];
       
       function createGroundCollision() {
-        // Create infinite ground collision at y=0 (physical ground)
-        const groundLevel = 0; // ground at 0 m altitude
-        const halfThickness = 0.5; // keep collider thin around y=0
-        const infiniteWidth = 100000; // Very wide ground - 100km in each direction
+        // Create infinite ground collision at y=0 (physical ground - scaled)
+        const groundLevel = 0; // ground at 0 altitude
+        const halfThickness = 0.05; // scaled down collision thickness
+        const infiniteWidth = 10000; // Very wide ground - scaled down
         
         const groundBody = world.createBody({
           type: 'static',
@@ -436,7 +438,7 @@
         
         // Reset
         if (reset) {
-          aircraft.setTransform(pl.Vec2(0, -600), 0); // Reset to safe altitude above ground
+          aircraft.setTransform(pl.Vec2(0, -60), 0); // Reset to safe altitude above ground (scaled)
           aircraft.setLinearVelocity(pl.Vec2(0, 0));
           aircraft.setAngularVelocity(0);
           game.throttle = 0.4;
@@ -479,10 +481,23 @@
           const wingArea = 20;
           const q = 0.5 * airDensity * speed * speed;
           
-          // Lift (simplified)
+          // Lift (simplified) with altitude-based reduction
           const velAngle = Math.atan2(vel.y, vel.x);
           const aoa = angle - velAngle;
-          const liftCoeff = Math.sin(aoa * 2) * 1.5;
+          let liftCoeff = Math.sin(aoa * 2) * 1.5;
+          
+          // Altitude-based lift reduction (physics units, converted to visual for calculation)
+          const visualAltitude = -pos.y * VISUAL_SCALE; // Convert to visual altitude
+          if (visualAltitude > 5000) {
+            if (visualAltitude >= 5250) {
+              liftCoeff = 0; // No lift above 5250m
+            } else {
+              // Linear reduction from 5000m to 5250m
+              const reductionFactor = 1 - ((visualAltitude - 5000) / 250);
+              liftCoeff *= reductionFactor;
+            }
+          }
+          
           const liftMag = q * wingArea * liftCoeff;
           const liftAngle = velAngle + Math.PI / 2;
           aircraft.applyForceToCenter(pl.Vec2(
@@ -685,10 +700,10 @@
         const pos = aircraft.getPosition();
         const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
         
-        document.getElementById('speed').textContent = Math.round(speed);
+        document.getElementById('speed').textContent = Math.round(speed * VISUAL_SCALE); // Convert to visual speed
         document.getElementById('throttle').textContent = Math.round(game.throttle * 100);
-        // Altitude: distance above ground. Our world uses y increasing downward, so altitude is -y when above ground
-        document.getElementById('altitude').textContent = Math.max(0, Math.round(-pos.y));
+        // Altitude: distance above ground (converted to visual altitude)
+        document.getElementById('altitude').textContent = Math.max(0, Math.round(-pos.y * VISUAL_SCALE));
         document.getElementById('zoom').textContent = game.camera.zoom.toFixed(1);
         
         // Show crash status
