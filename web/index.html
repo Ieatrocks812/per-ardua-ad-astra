@@ -959,8 +959,8 @@
           if (proj.type === 'tracer') {
             // Tracer gets smaller as it slows down
             const speedRatio = speed / proj.initialSpeed;
-            const tracerLength = Math.max(12 * game.camera.zoom, 24 * speedRatio * game.camera.zoom); // Scales with zoom
-            const tracerWidth = Math.max(5 * game.camera.zoom, 10 * speedRatio * game.camera.zoom); // Scales with zoom
+            const tracerLength = Math.max(12, 24 * speedRatio * game.camera.zoom); // Minimum 12px, scales with zoom
+            const tracerWidth = Math.max(5, 10 * speedRatio * game.camera.zoom); // Minimum 5px, scales with zoom
             
             if (assets.loaded.tracer && assets.tracer) {
               const scale = tracerLength / assets.tracer.naturalWidth;
@@ -975,7 +975,7 @@
             }
           } else {
             // Regular bullet
-            const bulletSize = Math.max(7 * game.camera.zoom, 12 * game.camera.zoom); // Scales with zoom
+            const bulletSize = Math.max(7, 12 * game.camera.zoom); // Minimum 7px, scales with zoom
             
             if (assets.loaded.bullet && assets.bullet) {
               const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
@@ -1003,7 +1003,7 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(casing.rotation);
           
-          const casingSize = Math.max(9 * game.camera.zoom, 14 * game.camera.zoom); // Scales with zoom
+          const casingSize = Math.max(9, 14 * game.camera.zoom); // Minimum 9px, scales with zoom
           
           if (assets.loaded.casing && assets.casing) {
             const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
