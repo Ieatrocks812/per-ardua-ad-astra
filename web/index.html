@@ -387,7 +387,8 @@
           console.log('🛬 G key - Game state after gear toggle:', { inverted: game.inverted, gearDown: game.gearDown });
         }
         // Fire guns (space)
-        if (key === ' ') {
+        if (key === ' ' || e.code === 'Space') {
+          console.log('🎯 SPACE pressed - attempting to fire guns');
           trySpawnGuns();
         }
       });
@@ -466,8 +467,13 @@
       const fireInterval = 60000 / fireRate; // ms between shots
       
       function trySpawnGuns() {
+        console.log('🔫 trySpawnGuns called');
         const now = performance.now();
-        if (now - lastFireTime < fireInterval) return;
+        console.log('🕒 Fire timing:', { now, lastFireTime, interval: fireInterval, canFire: now - lastFireTime >= fireInterval });
+        if (now - lastFireTime < fireInterval) {
+          console.log('⏱️ Fire rate limited, skipping');
+          return;
+        }
         lastFireTime = now;
         
         const pos = aircraft.getPosition();
