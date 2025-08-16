@@ -471,8 +471,8 @@
       
       createGroundCollision();
       
-      // Create enemy aircraft
-      createEnemies();
+      // Create initial enemy aircraft
+      createInitialEnemies();
       
       // =============================================================================
       // GUNS AND PROJECTILES
@@ -493,76 +493,112 @@
         // ENEMY SYSTEM
         // =============================================================================
         
-        function createEnemies() {
-          console.log('✈️ Creating enemy aircraft in V formations...');
+        // Enemy spawning system
+        let lastSpawnTime = 0;
+        const spawnInterval = 15000; // Spawn new formation every 15 seconds
+        let formationCounter = 0;
+        
+        function createInitialEnemies() {
+          console.log('✈️ Creating initial enemy aircraft formations...');
+          
+          // Create a few initial formations
+          for (let i = 0; i < 3; i++) {
+            spawnEnemyFormation();
+          }
+        }
+        
+        function spawnEnemyFormation() {
+          console.log('✈️ Spawning new enemy formation...');
           
           const enemyAltitude = -500; // 1000m above ground in physics units (500 * VISUAL_SCALE = 1000m)
-          const formationSpacing = 800; // 1600m between formations
           const vSpacing = 100; // 200m between aircraft in V formation
           const vOffset = 50; // 100m vertical offset for V wings
-          const numFormations = 4;
-          const startX = -1500; // Start 3000m to the left
           
-          for (let formation = 0; formation < numFormations; formation++) {
-            const formationX = startX + (formation * formationSpacing);
+          // Spawn from the right side of the map, far ahead of player
+          const spawnX = 2000; // 4000m to the right
+          
+          // Add some random altitude variation
+          const altitudeVariation = (Math.random() - 0.5) * 200; // ±200m variation
+          const baseAltitude = enemyAltitude + altitudeVariation;
+          
+          // Create V formation of 3 aircraft
+          for (let pos = 0; pos < 3; pos++) {
+            let x, y;
             
-            // Create V formation of 3 aircraft
-            for (let pos = 0; pos < 3; pos++) {
-              let x, y;
-              
-              if (pos === 0) {
-                // Lead aircraft (center of V)
-                x = formationX;
-                y = enemyAltitude;
-              } else if (pos === 1) {
-                // Left wing
-                x = formationX - vSpacing;
-                y = enemyAltitude - vOffset;
-              } else {
-                // Right wing  
-                x = formationX - vSpacing;
-                y = enemyAltitude + vOffset;
-              }
-              
-              // Create Box2D body for enemy (same as player aircraft physics)
-              const enemyBody = world.createBody({
-                type: 'dynamic',
-                position: pl.Vec2(x, y),
-                angle: 0,
-                linearDamping: 0.02, // Same as player
-                angularDamping: 2.0  // Lower than player for some natural movement
-              });
-              
-              enemyBody.createFixture({
-                shape: pl.Box(6, 1.5), // Slightly larger than player aircraft (12m x 3m)
-                density: 25, // Heavy bomber
-                friction: 0.3,
-                restitution: 0.1
-              });
-              
-              // Enemy data
-              const enemy = {
-                body: enemyBody,
-                health: 10, // Takes 10 hits to destroy
-                maxHealth: 10,
-                targetSpeed: 80, // Target cruise speed in m/s
-                destroyed: false,
-                thrustDisabled: false,
-                liftDisabled: false,
-                type: 'ju88',
-                formation: formation,
-                position: pos // 0=leader, 1=left wing, 2=right wing
-              };
-              
-              // Store reference in Box2D body for collision detection
-              enemyBody.setUserData({ type: 'enemy', enemy: enemy });
-              
-              game.enemies.push(enemy);
-              console.log(`✈️ Created Ju-88 bomber at (${x}, ${y}) - Formation ${formation}, Position ${pos}`);
+            if (pos === 0) {
+              // Lead aircraft (center of V)
+              x = spawnX;
+              y = baseAltitude;
+            } else if (pos === 1) {
+              // Left wing (relative to their flight direction - behind and below)
+              x = spawnX + vSpacing;
+              y = baseAltitude - vOffset;
+            } else {
+              // Right wing (relative to their flight direction - behind and above)
+              x = spawnX + vSpacing;
+              y = baseAltitude + vOffset;
             }
+            
+            // Create Box2D body for enemy
+            const enemyBody = world.createBody({
+              type: 'dynamic',
+              position: pl.Vec2(x, y),
+              angle: Math.PI, // Face left (180 degrees)
+              linearDamping: 0.02,
+              angularDamping: 2.0
+            });
+            
+            enemyBody.createFixture({
+              shape: pl.Box(6, 1.5), // Ju-88 bomber size (12m x 3m)
+              density: 25,
+              friction: 0.3,
+              restitution: 0.1
+            });
+            
+            // Enemy data
+            const enemy = {
+              body: enemyBody,
+              health: 10,
+              maxHealth: 10,
+              targetSpeed: 80,
+              destroyed: false,
+              thrustDisabled: false,
+              liftDisabled: false,
+              type: 'ju88',
+              formation: formationCounter,
+              position: pos,
+              spawnTime: performance.now()
+            };
+            
+            // Store reference for collision detection
+            enemyBody.setUserData({ type: 'enemy', enemy: enemy });
+            
+            game.enemies.push(enemy);
+            console.log(`✈️ Spawned Ju-88 bomber at (${x}, ${y}) - Formation ${formationCounter}, Position ${pos}`);
           }
           
-          console.log(`✈️ Created ${game.enemies.length} enemy aircraft in ${numFormations} V formations`);
+          formationCounter++;
+        }
+        
+        function updateEnemySpawning() {
+          const now = performance.now();
+          if (now - lastSpawnTime > spawnInterval) {
+            spawnEnemyFormation();
+            lastSpawnTime = now;
+          }
+          
+          // Clean up enemies that have flown too far to the left
+          for (let i = game.enemies.length - 1; i >= 0; i--) {
+            const enemy = game.enemies[i];
+            if (!enemy.destroyed) {
+              const pos = enemy.body.getPosition();
+              if (pos.x < -3000) { // 6000m to the left of spawn
+                console.log('🗑️ Removing enemy that flew off map');
+                world.destroyBody(enemy.body);
+                game.enemies.splice(i, 1);
+              }
+            }
+          }
         }
         
         function updateEnemies(dt) {
@@ -626,8 +662,8 @@
               enemy.body.applyForceToCenter(dragForce, true);
             }
             
-            // Simple AI: Keep wings level and nose pointing forward
-            const targetAngle = 0; // Fly straight (0 degrees)
+            // Simple AI: Keep wings level and nose pointing left
+            const targetAngle = Math.PI; // Fly left (180 degrees)
             const angleDiff = targetAngle - angle;
             
             // Normalize angle difference to [-π, π]
@@ -635,7 +671,7 @@
             while (normalizedAngleDiff > Math.PI) normalizedAngleDiff -= 2 * Math.PI;
             while (normalizedAngleDiff < -Math.PI) normalizedAngleDiff += 2 * Math.PI;
             
-            // Apply gentle correction torque to maintain straight flight
+            // Apply gentle correction torque to maintain leftward flight
             if (Math.abs(normalizedAngleDiff) > 0.1) { // 5 degree deadband
               const correctionTorque = normalizedAngleDiff * 15000; // Gentle correction
               enemy.body.applyTorque(correctionTorque, true);
@@ -1305,6 +1341,10 @@
             // Use Ju-88 sprite
             ctx.drawImage(assets.ju88, -enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
           } else {
+            // Debug: Log sprite loading status occasionally
+            if (Math.random() < 0.01) {
+              console.log('🖼️ Ju-88 sprite status:', { loaded: assets.loaded.ju88, hasSprite: !!assets.ju88 });
+            }
             // Fallback enemy - dark grey bomber
             ctx.fillStyle = enemy.health <= 5 ? '#8B0000' : '#444444'; // Red if heavily damaged
             ctx.fillRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
@@ -1433,6 +1473,7 @@
           updatePhysics(timeStep);
           updateProjectiles(timeStep);
           updateEnemies(timeStep);
+          updateEnemySpawning(); // Handle continuous spawning and cleanup
           updateExplosions(timeStep);
           world.step(timeStep);
           accumulator -= timeStep;
