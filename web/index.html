@@ -1576,8 +1576,10 @@
               const gravityCounterForce = enemy.body.getMass() * 9.81 * liftMultiplier * (1 - enemy.liftReduction * 0.5);
               enemy.body.applyForceToCenter(pl.Vec2(0, -gravityCounterForce), true);
               
-              // Drag (same as player)
-              const dragCoeff = 0.01 + Math.abs(liftCoeff) * 0.01;
+              // Drag - reduce for Ju-88s to let them cruise easier
+              const baseDrag = enemy.type === 'ju88' ? 0.004 : 0.01;
+              const inducedScale = enemy.type === 'ju88' ? 0.006 : 0.01;
+              const dragCoeff = baseDrag + Math.abs(liftCoeff) * inducedScale;
               const drag = q * wingArea * dragCoeff;
               const dragForce = pl.Vec2(-vel.x / speed * drag, -vel.y / speed * drag);
               enemy.body.applyForceToCenter(dragForce, true);
