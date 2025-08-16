@@ -570,7 +570,7 @@
           casing.vy += 9.81 * dt; // Gravity
           
           const speed = Math.sqrt(casing.vx * casing.vx + casing.vy * casing.vy);
-          const dragCoeff = 0.3; // Much more drag for casings (was 0.05)
+          const dragCoeff = 0.8; // Extreme drag for casings (was 0.3)
           const drag = dragCoeff * speed;
           
           if (speed > 0) {
@@ -959,8 +959,8 @@
           if (proj.type === 'tracer') {
             // Tracer gets smaller as it slows down
             const speedRatio = speed / proj.initialSpeed;
-            const tracerLength = Math.max(120, 240 * speedRatio * game.camera.zoom); // Doubled size
-            const tracerWidth = Math.max(50, 100 * speedRatio * game.camera.zoom); // Doubled size
+            const tracerLength = Math.max(12 * game.camera.zoom, 24 * speedRatio * game.camera.zoom); // Scales with zoom
+            const tracerWidth = Math.max(5 * game.camera.zoom, 10 * speedRatio * game.camera.zoom); // Scales with zoom
             
             if (assets.loaded.tracer && assets.tracer) {
               const scale = tracerLength / assets.tracer.naturalWidth;
@@ -975,7 +975,7 @@
             }
           } else {
             // Regular bullet
-            const bulletSize = Math.max(70, 120 * game.camera.zoom); // Doubled size
+            const bulletSize = Math.max(7 * game.camera.zoom, 12 * game.camera.zoom); // Scales with zoom
             
             if (assets.loaded.bullet && assets.bullet) {
               const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
@@ -1003,7 +1003,7 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(casing.rotation);
           
-          const casingSize = Math.max(90, 140 * game.camera.zoom); // Doubled size
+          const casingSize = Math.max(9 * game.camera.zoom, 14 * game.camera.zoom); // Scales with zoom
           
           if (assets.loaded.casing && assets.casing) {
             const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
