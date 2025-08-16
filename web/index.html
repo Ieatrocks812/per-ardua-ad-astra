@@ -242,9 +242,9 @@
             '/assets/sprites/effects/bullet.png'
           ],
           tracer: [
-            '../assets/sprites/effects/tracer_round.png',
-            './assets/sprites/effects/tracer_round.png',
-            '/assets/sprites/effects/tracer_round.png'
+            '../assets/sprites/effects/Tracer round.png',
+            './assets/sprites/effects/Tracer round.png',
+            '/assets/sprites/effects/Tracer round.png'
           ],
           casing: [
             '../assets/sprites/effects/casing.png',
@@ -467,10 +467,10 @@
       const fireInterval = 60000 / fireRate; // ms between shots
       
       // Projectile size settings (world units - stays same relative to plane/map regardless of zoom)
-      const BULLET_SIZE = 1.5; // world units
-      const TRACER_LENGTH = 8.0; // world units  
-      const TRACER_WIDTH = 2.0; // world units
-      const CASING_SIZE = 2.5; // world units
+      const BULLET_SIZE = 5; // world units
+      const TRACER_LENGTH = 1.0; // world units  
+      const TRACER_WIDTH = 0.1; // world units
+      const CASING_SIZE = 50; // world units
       
       function trySpawnGuns() {
         console.log('🔫 trySpawnGuns called');
@@ -968,10 +968,18 @@
             const tracerLength = TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom;
             const tracerWidth = TRACER_WIDTH * speedRatio * SCALE * game.camera.zoom;
             
+            // Debug scaling
+            console.log('🎯 Tracer scaling:', { 
+              TRACER_LENGTH, speedRatio, SCALE, zoom: game.camera.zoom, 
+              finalLength: tracerLength, finalWidth: tracerWidth,
+              assetLoaded: assets.loaded.tracer, hasAsset: !!assets.tracer 
+            });
+            
             if (assets.loaded.tracer && assets.tracer) {
-              const scale = tracerLength / assets.tracer.naturalWidth;
+              console.log('🖼️ Using tracer sprite:', assets.tracer.src);
               ctx.drawImage(assets.tracer, -tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
             } else {
+              console.log('🔸 Using fallback tracer');
               // Fallback tracer - bright orange/yellow, no red
               ctx.fillStyle = `rgba(255, 165, 0, ${Math.max(0.6, 0.9 * speedRatio)})`; // Orange instead of red
               ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
@@ -979,6 +987,15 @@
           } else {
             // Regular bullet - world scale
             const bulletSize = BULLET_SIZE * SCALE * game.camera.zoom;
+            
+            // Debug scaling (only log occasionally to avoid spam)
+            if (Math.random() < 0.01) {
+              console.log('🔫 Bullet scaling:', { 
+                BULLET_SIZE, SCALE, zoom: game.camera.zoom, 
+                finalSize: bulletSize,
+                assetLoaded: assets.loaded.bullet, hasAsset: !!assets.bullet 
+              });
+            }
             
             if (assets.loaded.bullet && assets.bullet) {
               const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
@@ -1004,6 +1021,15 @@
           ctx.rotate(casing.rotation);
           
           const casingSize = CASING_SIZE * SCALE * game.camera.zoom;
+          
+          // Debug scaling (only log occasionally to avoid spam)
+          if (Math.random() < 0.01) {
+            console.log('🔫 Casing scaling:', { 
+              CASING_SIZE, SCALE, zoom: game.camera.zoom, 
+              finalSize: casingSize,
+              assetLoaded: assets.loaded.casing, hasAsset: !!assets.casing 
+            });
+          }
           
           if (assets.loaded.casing && assets.casing) {
             const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
