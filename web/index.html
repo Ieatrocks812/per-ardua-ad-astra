@@ -940,8 +940,8 @@
           const escortAltitude = baseAltitude - 25; // Fighters fly slightly lower
           const escortOffset = 150; // Distance from bombers
           
-          // Create 2-4 bf-109 escorts per formation
-          const numEscorts = 2 + Math.floor(Math.random() * 3); // 2-4 escorts
+          // Create exactly 2 bf-109 escorts per formation
+          const numEscorts = 2; // Exactly 2 escorts as requested
           for (let i = 0; i < numEscorts; i++) {
             // Position escorts around the bomber formation
             const escortX = spawnX + (i % 2 === 0 ? -escortOffset : escortOffset) + (Math.random() - 0.5) * 50;
@@ -1079,7 +1079,7 @@
             // Aerodynamics (enhanced for level flight)
             if (speed > 1) {
               const q = 0.5 * 1.225 * speed * speed; // Dynamic pressure
-              const wingArea = 60; // Larger wing area for heavy bomber (48m wingspan)
+              const wingArea = enemy.type === 'ju88' ? 100 : 30; // Ju-88s need much more wing area to stay aloft
               
               // Calculate angle of attack relative to velocity
               const velocityAngle = Math.atan2(vel.y, vel.x);
@@ -1108,7 +1108,9 @@
                 enemy.body.applyForceToCenter(liftForce, true);
               
               // Additional upward force to counteract gravity (reduced by damage)
-              const gravityCounterForce = enemy.body.getMass() * 9.81 * 0.8 * (1 - enemy.liftReduction * 0.5);
+              // Ju-88s get more lift to prevent crashing, BF-109s are more agile
+              const liftMultiplier = enemy.type === 'ju88' ? 1.0 : 0.8;
+              const gravityCounterForce = enemy.body.getMass() * 9.81 * liftMultiplier * (1 - enemy.liftReduction * 0.5);
               enemy.body.applyForceToCenter(pl.Vec2(0, -gravityCounterForce), true);
               
               // Drag (same as player)
