@@ -254,9 +254,9 @@
             '/assets/sprites/effects/casing.png'
           ],
           ju88: [
-            '../assets/sprites/aircraft/enemies/ju88_bomber.png',
-            './assets/sprites/aircraft/enemies/ju88_bomber.png',
-            '/assets/sprites/aircraft/enemies/ju88_bomber.png'
+            '../assets/sprites/aircraft/enemies/ju-88.png',
+            './assets/sprites/aircraft/enemies/ju-88.png',
+            '/assets/sprites/aircraft/enemies/ju-88.png'
           ],
           explosion: [
             '../assets/sprites/effects/explosion.png',
@@ -487,60 +487,82 @@
         const BULLET_SIZE = 5; // world units
         const TRACER_LENGTH = 1.0; // world units  
         const TRACER_WIDTH = 0.1; // world units
-        const CASING_SIZE = 50; // world units
+        const CASING_SIZE = 3; // world units (much smaller casings)
         
         // =============================================================================
         // ENEMY SYSTEM
         // =============================================================================
         
         function createEnemies() {
-          console.log('✈️ Creating enemy aircraft...');
+          console.log('✈️ Creating enemy aircraft in V formations...');
           
-          // Create a line of Ju-88 bombers at 1000m altitude
           const enemyAltitude = -500; // 1000m above ground in physics units (500 * VISUAL_SCALE = 1000m)
-          const enemySpacing = 200; // 400m apart in world
-          const numEnemies = 10;
-          const startX = -1000; // Start 2000m to the left
+          const formationSpacing = 800; // 1600m between formations
+          const vSpacing = 100; // 200m between aircraft in V formation
+          const vOffset = 50; // 100m vertical offset for V wings
+          const numFormations = 4;
+          const startX = -1500; // Start 3000m to the left
           
-          for (let i = 0; i < numEnemies; i++) {
-            const x = startX + (i * enemySpacing);
+          for (let formation = 0; formation < numFormations; formation++) {
+            const formationX = startX + (formation * formationSpacing);
             
-            // Create Box2D body for enemy
-            const enemyBody = world.createBody({
-              type: 'dynamic',
-              position: pl.Vec2(x, enemyAltitude),
-              angle: 0,
-              linearDamping: 0.05,
-              angularDamping: 2.0
-            });
-            
-            enemyBody.createFixture({
-              shape: pl.Box(8, 2), // Larger than player aircraft (16m x 4m)
-              density: 30, // Heavy bomber
-              friction: 0.2,
-              restitution: 0.1
-            });
-            
-            // Enemy data
-            const enemy = {
-              body: enemyBody,
-              health: 10, // Takes 10 hits to destroy
-              maxHealth: 10,
-              speed: 80, // Cruise speed in m/s
-              destroyed: false,
-              thrustDisabled: false,
-              liftDisabled: false,
-              type: 'ju88'
-            };
-            
-            // Store reference in Box2D body for collision detection
-            enemyBody.setUserData({ type: 'enemy', enemy: enemy });
-            
-            game.enemies.push(enemy);
-            console.log(`✈️ Created Ju-88 bomber at (${x}, ${enemyAltitude})`);
+            // Create V formation of 3 aircraft
+            for (let pos = 0; pos < 3; pos++) {
+              let x, y;
+              
+              if (pos === 0) {
+                // Lead aircraft (center of V)
+                x = formationX;
+                y = enemyAltitude;
+              } else if (pos === 1) {
+                // Left wing
+                x = formationX - vSpacing;
+                y = enemyAltitude - vOffset;
+              } else {
+                // Right wing  
+                x = formationX - vSpacing;
+                y = enemyAltitude + vOffset;
+              }
+              
+              // Create Box2D body for enemy (same as player aircraft physics)
+              const enemyBody = world.createBody({
+                type: 'dynamic',
+                position: pl.Vec2(x, y),
+                angle: 0,
+                linearDamping: 0.02, // Same as player
+                angularDamping: 2.0  // Lower than player for some natural movement
+              });
+              
+              enemyBody.createFixture({
+                shape: pl.Box(6, 1.5), // Slightly larger than player aircraft (12m x 3m)
+                density: 25, // Heavy bomber
+                friction: 0.3,
+                restitution: 0.1
+              });
+              
+              // Enemy data
+              const enemy = {
+                body: enemyBody,
+                health: 10, // Takes 10 hits to destroy
+                maxHealth: 10,
+                targetSpeed: 80, // Target cruise speed in m/s
+                destroyed: false,
+                thrustDisabled: false,
+                liftDisabled: false,
+                type: 'ju88',
+                formation: formation,
+                position: pos // 0=leader, 1=left wing, 2=right wing
+              };
+              
+              // Store reference in Box2D body for collision detection
+              enemyBody.setUserData({ type: 'enemy', enemy: enemy });
+              
+              game.enemies.push(enemy);
+              console.log(`✈️ Created Ju-88 bomber at (${x}, ${y}) - Formation ${formation}, Position ${pos}`);
+            }
           }
           
-          console.log(`✈️ Created ${game.enemies.length} enemy aircraft`);
+          console.log(`✈️ Created ${game.enemies.length} enemy aircraft in ${numFormations} V formations`);
         }
         
         function updateEnemies(dt) {
@@ -549,27 +571,75 @@
             
             const pos = enemy.body.getPosition();
             const vel = enemy.body.getLinearVelocity();
-            
-            // Basic AI: Fly straight at cruise speed unless damaged
-            if (!enemy.thrustDisabled) {
-              const thrust = 40000; // Bomber thrust
-              enemy.body.applyForceToCenter(pl.Vec2(thrust, 0), true);
-            }
-            
-            // Apply lift unless disabled
-            if (!enemy.liftDisabled) {
-              const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-              if (speed > 10) {
-                const lift = 8000; // Bomber lift
-                enemy.body.applyForceToCenter(pl.Vec2(0, lift), true);
-              }
-            }
-            
-            // Apply drag
-            const dragCoeff = 0.02;
+            const angle = enemy.body.getAngle();
             const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-            const drag = pl.Vec2(-vel.x * dragCoeff * speed, -vel.y * dragCoeff * speed);
-            enemy.body.applyForceToCenter(drag, true);
+            
+            // Use same physics as player aircraft but with AI controls
+            
+            // Thrust (same calculation as player)
+            if (!enemy.thrustDisabled) {
+              let maxThrust = 100000; // Same base thrust as player
+              
+              // Apply altitude-based thrust reduction (same as player)
+              const visualAltitude = -pos.y * VISUAL_SCALE;
+              if (visualAltitude > 5000) {
+                const altitudeReduction = Math.max(0, (5250 - visualAltitude) / 250);
+                maxThrust *= altitudeReduction;
+              }
+              
+              const thrust = 0.8 * maxThrust; // 80% throttle for cruise
+              const thrustForce = pl.Vec2(Math.cos(angle) * thrust, Math.sin(angle) * thrust);
+              enemy.body.applyForceToCenter(thrustForce, true);
+            }
+            
+            // Aerodynamics (same as player)
+            if (speed > 1) {
+              const q = 0.5 * 1.225 * speed * speed; // Dynamic pressure
+              const wingArea = 25; // Wing area in m²
+              
+              // Calculate angle of attack relative to velocity
+              const velocityAngle = Math.atan2(vel.y, vel.x);
+              const aoa = angle - velocityAngle;
+              
+              // Lift coefficient (same as player)
+              let liftCoeff = Math.sin(aoa * 2) * 1.5;
+              
+              // Apply altitude-based lift reduction (same as player)
+              const visualAltitude = -pos.y * VISUAL_SCALE;
+              if (visualAltitude > 5000) {
+                const altitudeReduction = Math.max(0, (5250 - visualAltitude) / 250);
+                liftCoeff *= altitudeReduction;
+              }
+              
+              // Apply lift perpendicular to velocity
+              if (!enemy.liftDisabled) {
+                const lift = q * wingArea * liftCoeff;
+                const liftAngle = velocityAngle + Math.PI/2;
+                const liftForce = pl.Vec2(Math.cos(liftAngle) * lift, Math.sin(liftAngle) * lift);
+                enemy.body.applyForceToCenter(liftForce, true);
+              }
+              
+              // Drag (same as player)
+              const dragCoeff = 0.01 + Math.abs(liftCoeff) * 0.01;
+              const drag = q * wingArea * dragCoeff;
+              const dragForce = pl.Vec2(-vel.x / speed * drag, -vel.y / speed * drag);
+              enemy.body.applyForceToCenter(dragForce, true);
+            }
+            
+            // Simple AI: Keep wings level and nose pointing forward
+            const targetAngle = 0; // Fly straight (0 degrees)
+            const angleDiff = targetAngle - angle;
+            
+            // Normalize angle difference to [-π, π]
+            let normalizedAngleDiff = angleDiff;
+            while (normalizedAngleDiff > Math.PI) normalizedAngleDiff -= 2 * Math.PI;
+            while (normalizedAngleDiff < -Math.PI) normalizedAngleDiff += 2 * Math.PI;
+            
+            // Apply gentle correction torque to maintain straight flight
+            if (Math.abs(normalizedAngleDiff) > 0.1) { // 5 degree deadband
+              const correctionTorque = normalizedAngleDiff * 15000; // Gentle correction
+              enemy.body.applyTorque(correctionTorque, true);
+            }
           });
         }
         
@@ -1227,9 +1297,9 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(angle);
           
-          // Enemy aircraft size
-          const enemyWidth = 16 * SCALE * game.camera.zoom; // 32m wingspan
-          const enemyHeight = 4 * SCALE * game.camera.zoom; // 8m length
+          // Enemy aircraft size (Ju-88 bomber)
+          const enemyWidth = 12 * SCALE * game.camera.zoom; // 24m wingspan
+          const enemyHeight = 3 * SCALE * game.camera.zoom; // 6m length
           
           if (assets.loaded.ju88 && assets.ju88) {
             // Use Ju-88 sprite
