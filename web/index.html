@@ -557,7 +557,7 @@
             });
             
             enemyBody.createFixture({
-              shape: pl.Box(12, 5), // Much larger Ju-88 bomber (24m x 10m - taller)
+              shape: pl.Box(12, 8), // Much larger Ju-88 bomber (24m x 16m - much taller)
               density: 25,
               friction: 0.3,
               restitution: 0.1
@@ -1367,9 +1367,9 @@
           ctx.translate(screenPos.x, screenPos.y);
           ctx.rotate(angle);
           
-          // Enemy aircraft size (Ju-88 heavy bomber - much larger and taller)
+          // Enemy aircraft size (Ju-88 heavy bomber - much larger and much taller)
           const enemyWidth = 24 * SCALE * game.camera.zoom; // 48m wingspan (2x larger)
-          const enemyHeight = 10 * SCALE * game.camera.zoom; // 20m length (taller, no more flying pencils)
+          const enemyHeight = 16 * SCALE * game.camera.zoom; // 32m length (very tall, chunky bomber)
           
           if (assets.loaded.ju88 && assets.ju88) {
             // Use Ju-88 sprite
