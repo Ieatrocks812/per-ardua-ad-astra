@@ -109,6 +109,7 @@
       
       // Start screen functionality
       document.getElementById('startButton').addEventListener('click', () => {
+        if (gameStarted) return; // prevent double init
         console.log('🚀 Starting game...');
         document.getElementById('startScreen').style.display = 'none';
         gameStarted = true;
@@ -843,8 +844,9 @@
         requestAnimationFrame(gameLoop);
       }
       
-      // Start the loop only after initializeGame() is invoked from Start button
-      console.log('Flight simulator ready. Awaiting Start.');
+      // Start the loop now that initializeGame() has been invoked from Start button
+      console.log('Starting flight simulator...');
+      requestAnimationFrame(gameLoop);
       }
       
       // Do not auto-start; wait for Start button click (handled above)
