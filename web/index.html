@@ -196,9 +196,17 @@
             loadImage('spitfireInvertedGear', assetPaths.spitfireInvertedGear)
           ]);
           console.log('🎉 All assets loaded successfully!');
+          console.log('📊 Final asset load status:', assets.loaded);
+          
+          // Specifically check gear sprites
+          console.log('🛬 Gear sprite status:', {
+            spitfireGear: { loaded: assets.loaded.spitfireGear, hasImage: !!assets.spitfireGear },
+            spitfireInvertedGear: { loaded: assets.loaded.spitfireInvertedGear, hasImage: !!assets.spitfireInvertedGear }
+          });
         } catch (error) {
           console.warn('⚠️ Some assets failed to load:', error.message);
           console.log('🎮 Game will continue with fallback graphics');
+          console.log('📊 Asset load status after error:', assets.loaded);
         }
       }
       
@@ -535,20 +543,34 @@
         ctx.rotate(angle);
         
         // Choose sprite based on inverted mode and gear state
-        let currentSprite, spriteLoaded;
+        let currentSprite, spriteLoaded, spriteDescription;
         
         if (game.inverted && game.gearDown) {
           currentSprite = assets.spitfireInvertedGear;
           spriteLoaded = assets.loaded.spitfireInvertedGear;
+          spriteDescription = "inverted with gear";
         } else if (game.inverted && !game.gearDown) {
           currentSprite = assets.spitfireInverted;
           spriteLoaded = assets.loaded.spitfireInverted;
+          spriteDescription = "inverted no gear";
         } else if (!game.inverted && game.gearDown) {
           currentSprite = assets.spitfireGear;
           spriteLoaded = assets.loaded.spitfireGear;
+          spriteDescription = "normal with gear";
         } else {
           currentSprite = assets.spitfire;
           spriteLoaded = assets.loaded.spitfire;
+          spriteDescription = "normal no gear";
+        }
+        
+        // Debug: Log sprite selection when gear changes
+        if (game.keys.has('g') && Math.random() < 0.1) { // 10% chance when G is held
+          console.log('🎨 Sprite selection:', {
+            description: spriteDescription,
+            spriteLoaded: spriteLoaded,
+            hasSprite: !!currentSprite,
+            allLoadStates: assets.loaded
+          });
         }
         
         if (spriteLoaded && currentSprite) {
