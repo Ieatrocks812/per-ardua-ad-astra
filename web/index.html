@@ -205,6 +205,8 @@
         console.log('🎮 Starting asset loading...');
         console.log('📍 Current location:', window.location.href);
         console.log('📂 Base directory:', window.location.origin + window.location.pathname.replace('/web/index.html', ''));
+        console.log('🛩️ Loading Ju-88 sprite from:', '../assets/sprites/aircraft/enemies/ju-88.png');
+        console.log('🎯 Loading Tracer sprite from:', '../assets/sprites/effects/Tracer round.png');
         
         // Define asset paths to try (in order of preference)
         const assetPaths = {
@@ -312,10 +314,12 @@
             loadImage('spitfireInverted', assetPaths.spitfireInverted),
             loadImage('spitfireGear', assetPaths.spitfireGear),
             loadImage('spitfireInvertedGear', assetPaths.spitfireInvertedGear),
-            loadImage('bullet', assetPaths.bullet),
-            loadImage('tracer', assetPaths.tracer),
-            loadImage('casing', assetPaths.casing)
-          ]);
+                      loadImage('bullet', assetPaths.bullet),
+          loadImage('tracer', assetPaths.tracer),
+          loadImage('casing', assetPaths.casing),
+          loadImage('ju88', assetPaths.ju88),
+          loadImage('explosion', assetPaths.explosion)
+        ]);
           console.log('🎉 All assets loaded successfully!');
           console.log('📊 Final asset load status:', assets.loaded);
           
@@ -328,6 +332,10 @@
             bullet: { loaded: assets.loaded.bullet, hasImage: !!assets.bullet },
             tracer: { loaded: assets.loaded.tracer, hasImage: !!assets.tracer },
             casing: { loaded: assets.loaded.casing, hasImage: !!assets.casing }
+          });
+          console.log('✈️ Enemy asset status:', {
+            ju88: { loaded: assets.loaded.ju88, hasImage: !!assets.ju88, src: assets.ju88?.src },
+            explosion: { loaded: assets.loaded.explosion, hasImage: !!assets.explosion }
           });
         } catch (error) {
           console.warn('⚠️ Some assets failed to load:', error.message);
@@ -587,13 +595,21 @@
             lastSpawnTime = now;
           }
           
-          // Clean up enemies that have flown too far to the left
+          // Clean up enemies that are too far from the player
+          const playerPos = aircraft.getPosition();
+          const maxDistance = 5000; // 10000m from player (really far)
+          
           for (let i = game.enemies.length - 1; i >= 0; i--) {
             const enemy = game.enemies[i];
             if (!enemy.destroyed) {
               const pos = enemy.body.getPosition();
-              if (pos.x < -3000) { // 6000m to the left of spawn
-                console.log('🗑️ Removing enemy that flew off map');
+              const distance = Math.sqrt(
+                (pos.x - playerPos.x) * (pos.x - playerPos.x) + 
+                (pos.y - playerPos.y) * (pos.y - playerPos.y)
+              );
+              
+              if (distance > maxDistance) {
+                console.log(`🗑️ Removing enemy too far from player (distance: ${distance * VISUAL_SCALE}m)`);
                 world.destroyBody(enemy.body);
                 game.enemies.splice(i, 1);
               }
@@ -1244,34 +1260,16 @@
             const tracerLength = TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom;
             const tracerWidth = TRACER_WIDTH * speedRatio * SCALE * game.camera.zoom;
             
-            // Debug scaling
-            console.log('🎯 Tracer scaling:', { 
-              TRACER_LENGTH, speedRatio, SCALE, zoom: game.camera.zoom, 
-              finalLength: tracerLength, finalWidth: tracerWidth,
-              assetLoaded: assets.loaded.tracer, hasAsset: !!assets.tracer 
-            });
-            
             if (assets.loaded.tracer && assets.tracer) {
-              console.log('🖼️ Using tracer sprite:', assets.tracer.src);
               ctx.drawImage(assets.tracer, -tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
             } else {
-              console.log('🔸 Using fallback tracer');
-              // Fallback tracer - bright orange/yellow, no red
-              ctx.fillStyle = `rgba(255, 165, 0, ${Math.max(0.6, 0.9 * speedRatio)})`; // Orange instead of red
+              // Fallback tracer - bright orange/yellow
+              ctx.fillStyle = `rgba(255, 165, 0, ${Math.max(0.6, 0.9 * speedRatio)})`;
               ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
             }
           } else {
             // Regular bullet - world scale
             const bulletSize = BULLET_SIZE * SCALE * game.camera.zoom;
-            
-            // Debug scaling (only log occasionally to avoid spam)
-            if (Math.random() < 0.01) {
-              console.log('🔫 Bullet scaling:', { 
-                BULLET_SIZE, SCALE, zoom: game.camera.zoom, 
-                finalSize: bulletSize,
-                assetLoaded: assets.loaded.bullet, hasAsset: !!assets.bullet 
-              });
-            }
             
             if (assets.loaded.bullet && assets.bullet) {
               const scale = bulletSize / Math.max(assets.bullet.naturalWidth, assets.bullet.naturalHeight);
@@ -1297,15 +1295,6 @@
           ctx.rotate(casing.rotation);
           
           const casingSize = CASING_SIZE * SCALE * game.camera.zoom;
-          
-          // Debug scaling (only log occasionally to avoid spam)
-          if (Math.random() < 0.01) {
-            console.log('🔫 Casing scaling:', { 
-              CASING_SIZE, SCALE, zoom: game.camera.zoom, 
-              finalSize: casingSize,
-              assetLoaded: assets.loaded.casing, hasAsset: !!assets.casing 
-            });
-          }
           
           if (assets.loaded.casing && assets.casing) {
             const scale = casingSize / Math.max(assets.casing.naturalWidth, assets.casing.naturalHeight);
@@ -1341,10 +1330,6 @@
             // Use Ju-88 sprite
             ctx.drawImage(assets.ju88, -enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
           } else {
-            // Debug: Log sprite loading status occasionally
-            if (Math.random() < 0.01) {
-              console.log('🖼️ Ju-88 sprite status:', { loaded: assets.loaded.ju88, hasSprite: !!assets.ju88 });
-            }
             // Fallback enemy - dark grey bomber
             ctx.fillStyle = enemy.health <= 5 ? '#8B0000' : '#444444'; // Red if heavily damaged
             ctx.fillRect(-enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
