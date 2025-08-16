@@ -136,42 +136,37 @@
       const WORLD_HEIGHT = 3000 * PHYSICS_SCALE; // Physics: 300 units (visually 3000m)
       const MAP_BOTTOM_ALTITUDE = 300; // Physics: 300 units above ground (visually 600m)
       
-      // Physics world
+      // CRITICAL: Set Planck.js settings BEFORE creating the world
+      // This is essential to remove the 240 m/s speed cap
+      console.log('🔧 Setting Box2D velocity limits BEFORE world creation...');
+      
+      if (typeof planck !== 'undefined' && planck.Settings) {
+        console.log('📊 Original planck.Settings:', { 
+          maxTranslation: planck.Settings.maxTranslation, 
+          velocityThreshold: planck.Settings.velocityThreshold
+        });
+        // Set extremely high limits to remove all speed caps
+        planck.Settings.maxTranslation = 50.0; // Very high limit
+        planck.Settings.velocityThreshold = 50.0; // Increase velocity threshold
+        console.log('✅ Updated planck.Settings for unlimited speed');
+      }
+      
+      if (typeof pl !== 'undefined' && pl.Settings) {
+        console.log('📊 Original pl.Settings:', { 
+          maxTranslation: pl.Settings.maxTranslation,
+          velocityThreshold: pl.Settings.velocityThreshold
+        });
+        // Set extremely high limits
+        pl.Settings.maxTranslation = 50.0; // Extremely high
+        pl.Settings.velocityThreshold = 50.0; // Remove velocity sleeping
+        console.log('✅ Updated pl.Settings:', { 
+          maxTranslation: pl.Settings.maxTranslation,
+          velocityThreshold: pl.Settings.velocityThreshold
+        });
+      }
+      
+      // NOW create the physics world with the updated settings
       const world = new pl.World(pl.Vec2(0, 9.81));
-      
-      // Remove Box2D velocity limits for higher speeds
-      // Default is 2.0 units per timestep (120 m/s at 60fps)
-      // With PHYSICS_SCALE = 0.5, we need even higher limits
-      console.log('🔧 Attempting to override Box2D velocity limits...');
-      
-      // Set Planck.js settings BEFORE creating any bodies
-      if (typeof pl.Settings !== 'undefined') {
-        console.log('📊 Original Settings:', { 
-          maxTranslation: pl.Settings.maxTranslation, 
-          maxLinearVelocity: pl.Settings.maxLinearVelocity 
-        });
-        // Much higher limits to allow for 400+ m/s speeds
-        pl.Settings.maxTranslation = 20.0; // Increase from default 2.0 to 20.0
-        pl.Settings.maxLinearVelocity = 1000.0; // Allow up to 1000 m/s in physics units
-        console.log('✅ Updated Settings:', { 
-          maxTranslation: pl.Settings.maxTranslation, 
-          maxLinearVelocity: pl.Settings.maxLinearVelocity 
-        });
-      } else {
-        console.log('⚠️ pl.Settings not available - trying alternative methods');
-      }
-      
-      // Also try setting on world object if available
-      if (world.setMaxLinearVelocity) {
-        world.setMaxLinearVelocity(20.0); // Allow up to 1200 m/s at 60fps
-        console.log('✅ Set world max linear velocity to 20.0');
-      }
-      
-      // Try another approach - modify the world's step settings
-      if (world.m_maxLinearVelocity !== undefined) {
-        world.m_maxLinearVelocity = 20.0;
-        console.log('✅ Set world.m_maxLinearVelocity to 20.0');
-      }
       
       // Canvas setup
       let canvasWidth = 0;
@@ -443,7 +438,7 @@
         type: 'dynamic',
         position: pl.Vec2(0, -300), // 300 physics units above ground (visually 600m)
         angle: 0,
-        linearDamping: 0.02, // Reduced from 0.1 for higher top speeds
+        linearDamping: 0.0, // Removed damping to eliminate speed cap
         angularDamping: 8.0 // Very high damping for instant stop when controls released (works with force-based controls)
       });
       
@@ -1374,14 +1369,16 @@
           
           ctx.save();
           ctx.translate(screenPos.x, screenPos.y);
-          ctx.rotate(angle);
+          // Rotate 180 degrees to fix upside down, and don't add the angle since they fly backwards
+          ctx.rotate(angle + Math.PI);
           
           // Enemy aircraft size (Ju-88 heavy bomber - much larger and much taller)
           const enemyWidth = 24 * SCALE * game.camera.zoom; // 48m wingspan (2x larger)
           const enemyHeight = 16 * SCALE * game.camera.zoom; // 32m length (very tall, chunky bomber)
           
           if (assets.loaded.ju88 && assets.ju88) {
-            // Use Ju-88 sprite
+            // Use Ju-88 sprite - flip horizontally to correct backwards orientation
+            ctx.scale(-1, 1); // Flip horizontally
             ctx.drawImage(assets.ju88, -enemyWidth/2, -enemyHeight/2, enemyWidth, enemyHeight);
           } else {
             // Fallback enemy - dark grey bomber
