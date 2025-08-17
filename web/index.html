@@ -2791,18 +2791,27 @@
             ctx.rotate(angle);
             
             if (proj.type === 'tracer' && assets.loaded.tracer && assets.tracer) {
-              const scale = (TRACER_LENGTH * SCALE * game.camera.zoom) / assets.tracer.naturalWidth;
-              const drawW = assets.tracer.naturalWidth * scale;
-              const drawH = assets.tracer.naturalHeight * scale;
-              ctx.drawImage(assets.tracer, -drawW/2, -drawH/2, drawW, drawH);
+              // Scale tracer sprite by speed (longer/fatter at higher speed)
+              const speedRatio = Math.max(0.2, Math.min(1.0, speed / (proj.initialSpeed || speed || 1)));
+              const tracerLength = Math.max(8, TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom);
+              const tracerWidth = Math.max(3, TRACER_WIDTH * (0.6 + 0.4 * speedRatio) * SCALE * game.camera.zoom);
+              ctx.drawImage(assets.tracer, -tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
             } else if (proj.type === 'bullet' && assets.loaded.bullet && assets.bullet) {
               const size = BULLET_SIZE * SCALE * game.camera.zoom;
               ctx.drawImage(assets.bullet, -size/2, -size/2, size, size);
             } else {
               // Fallback
-              const bulletSize = 3 * SCALE * game.camera.zoom;
-              ctx.fillStyle = proj.type === 'tracer' ? '#FFFF66' : '#FF4444';
-              ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
+              if (proj.type === 'tracer') {
+                const speedRatio = Math.max(0.2, Math.min(1.0, speed / (proj.initialSpeed || speed || 1)));
+                const tracerLength = Math.max(8, TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom);
+                const tracerWidth = Math.max(3, TRACER_WIDTH * (0.6 + 0.4 * speedRatio) * SCALE * game.camera.zoom);
+                ctx.fillStyle = '#FFFF66';
+                ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
+              } else {
+                const bulletSize = Math.max(3, BULLET_SIZE * SCALE * game.camera.zoom);
+                ctx.fillStyle = '#FF4444';
+                ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
+              }
             }
             
             ctx.restore();
