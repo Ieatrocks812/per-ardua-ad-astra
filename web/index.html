@@ -2274,7 +2274,7 @@
             
             // Enemy takes damage based on impact speed (Ju-88s are more fragile)
             let damage = 0;
-            const isJu88 = enemyData?.enemy?.type === 'ju88';
+            const isJu88 = enemy.type === 'ju88';
             
             if (isJu88) {
               // Ju-88s are much more fragile on ground impact
