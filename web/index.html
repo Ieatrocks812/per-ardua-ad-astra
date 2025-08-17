@@ -1221,13 +1221,18 @@
               x: vel.x + Math.cos(actualAngle) * muzzleVelocity,
               y: vel.y + Math.sin(actualAngle) * muzzleVelocity
             };
+
+            // Spawn slightly ahead of the mount along the firing direction to avoid hitting own airframe
+            const muzzleOffset = 3.0; // meters
+            const spawnX = gunPos.x + Math.cos(actualAngle) * muzzleOffset;
+            const spawnY = gunPos.y + Math.sin(actualAngle) * muzzleOffset;
             
             enemy._shotIndex = (enemy._shotIndex || 0) + 1;
             const isTracer = (enemy._shotIndex % 2 === 0);
             
             game.enemyProjectiles.push({
-              x: gunPos.x,
-              y: gunPos.y,
+              x: spawnX,
+              y: spawnY,
               vx: bulletVel.x,
               vy: bulletVel.y,
               type: isTracer ? 'tracer' : 'bullet',
@@ -1551,9 +1556,12 @@
                     };
                     if (!game.enemyProjectiles) game.enemyProjectiles = [];
                     // 100% tracers
+                    const muzzleOffset = 3.0;
+                    const spawnX = gunPos.x + Math.cos(firingAngle) * muzzleOffset;
+                    const spawnY = gunPos.y + Math.sin(firingAngle) * muzzleOffset;
                     game.enemyProjectiles.push({
-                      x: gunPos.x,
-                      y: gunPos.y,
+                      x: spawnX,
+                      y: spawnY,
                       vx: bulletVel.x,
                       vy: bulletVel.y,
                       type: 'tracer',
