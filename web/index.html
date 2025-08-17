@@ -898,16 +898,15 @@
         
         // Enemy spawning system variables (initialize explicitly)
         var lastSpawnTime = 0;
-        var spawnInterval = 15000; // Spawn new formation every 15 seconds
+        var spawnInterval = 20000; // Spawn new formation every 20 seconds (reduce clustering)
         var formationCounter = 0;
         
         function createInitialEnemies() {
           console.log('✈️ Creating initial enemy aircraft formations...');
-          
-          // Create a few initial formations
-          for (let i = 0; i < 3; i++) {
-            spawnEnemyFormation();
-          }
+          // Spawn only one initial formation to mitigate large crowds at start
+          spawnEnemyFormation();
+          // Delay next spawn by setting lastSpawnTime to now
+          lastSpawnTime = performance.now();
         }
         
         function spawnEnemyFormation() {
@@ -1586,8 +1585,8 @@
               enemy.body.applyForceToCenter(pl.Vec2(0, -gravityCounterForce), true);
               
               // Drag - reduce for Ju-88s to let them cruise easier
-              const baseDrag = enemy.type === 'ju88' ? 0.004 : 0.01;
-              const inducedScale = enemy.type === 'ju88' ? 0.006 : 0.01;
+              const baseDrag = enemy.type === 'ju88' ? 0.003 : 0.01; // Lower drag for Ju-88s
+              const inducedScale = enemy.type === 'ju88' ? 0.004 : 0.01; // Lower induced drag for Ju-88s
               const dragCoeff = baseDrag + Math.abs(liftCoeff) * inducedScale;
               const drag = q * wingArea * dragCoeff;
               const dragForce = pl.Vec2(-vel.x / speed * drag, -vel.y / speed * drag);
