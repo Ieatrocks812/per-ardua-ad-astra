@@ -2351,6 +2351,9 @@
           game.throttle = 0.4;
           game.camera.zoom = 0.8;
           game.crashed = false; // Reset crash state
+          game.playerHealth = game.playerMaxHealth; // Restore full health on respawn
+          game.spawnShieldUntil = performance.now() + 4000; // Reset spawn protection
+          console.log('🔄 Player respawned with full health');
           return;
         }
         
