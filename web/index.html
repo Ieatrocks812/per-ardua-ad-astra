@@ -1205,6 +1205,19 @@
             const vel = enemy.body.getLinearVelocity();
             const angle = enemy.body.getAngle();
             const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+
+            // Heavily damaged BF-109 spin prevention
+            const bf109Damaged = (enemy.type === 'bf109') && (enemy.onFire || enemy.liftReduction > 0.5 || enemy.thrustReduction > 0.6 || enemy.health <= 1);
+            if (bf109Damaged) {
+              if (enemy.body.setAngularDamping) enemy.body.setAngularDamping(10.0);
+              const w = enemy.body.getAngularVelocity();
+              const maxW = 0.8;
+              const clamped = Math.max(-maxW, Math.min(maxW, w));
+              enemy.body.setAngularVelocity(clamped * 0.85);
+              // Keep a small forward force to avoid rotating about a point
+              const forwardForce = Math.max(4000, (1 - (enemy.thrustReduction || 0)) * 12000);
+              enemy.body.applyForceToCenter(pl.Vec2(Math.cos(angle) * forwardForce, Math.sin(angle) * forwardForce), true);
+            }
             
             // Enhanced AI behavior for BF-109 fighters
             if (enemy.type === 'bf109') {
@@ -1612,6 +1625,7 @@
 
               // If BF-109 is heavily damaged, clamp spin and reduce angular velocity instead of adding torque
               if (bf109HeavilyDamaged) {
+                if (enemy.body.setAngularDamping) enemy.body.setAngularDamping(10.0);
                 const w = enemy.body.getAngularVelocity();
                 const maxW = 1.0; // rad/s
                 const clamped = Math.max(-maxW, Math.min(maxW, w));
@@ -1628,6 +1642,7 @@
                 enemy.body.applyTorque(crashTorque, true);
               } else {
                 // For BF-109s: clamp/damp spin and glide instead of spinning around a point
+                if (enemy.body.setAngularDamping) enemy.body.setAngularDamping(10.0);
                 const w = enemy.body.getAngularVelocity();
                 const maxW = 1.0;
                 const clamped = Math.max(-maxW, Math.min(maxW, w));
