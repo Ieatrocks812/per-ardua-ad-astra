@@ -1197,16 +1197,10 @@
             while (rel < -Math.PI) rel += 2 * Math.PI;
             if (Math.abs(rel) > mount.arc) return;
             
-            // Lead (aces)
-            let leadFactor = 0;
-            if (enemy.skillLevel === 'ace') {
-              const bulletSpeed = 350;
-              const timeToTarget = distance / bulletSpeed;
-              leadFactor = timeToTarget * 0.5;
-            }
-            const predictedX = playerPos.x + playerVel.x * leadFactor;
-            const predictedY = playerPos.y + playerVel.y * leadFactor;
-            let firingAngle = Math.atan2(predictedY - gunPos.y, predictedX - gunPos.x);
+            // Random defensive fire when player is near: ignore precise lead
+            const baseAngle = Math.atan2(playerPos.y - gunPos.y, playerPos.x - gunPos.x);
+            const randomSpread = (Math.random() - 0.5) * 0.6; // Wide spread
+            let firingAngle = baseAngle + randomSpread;
             
             // Avoid friendly fire
             const friendlyNear = game.enemies.some(other => {
@@ -1220,7 +1214,7 @@
             if (friendlyNear) return;
             
             // Spread
-            const spread = enemy.skillLevel === 'ace' ? 0.02 : 0.05;
+            const spread = 0.15; // Additional inaccuracy
             const actualAngle = firingAngle + (Math.random() - 0.5) * spread;
             const muzzleVelocity = 350;
             const bulletVel = {
@@ -2803,35 +2797,19 @@
             ctx.translate(screenPos.x, screenPos.y);
             ctx.rotate(angle);
             
-            if (proj.type === 'tracer') {
-              // Enemy tracers - also bright yellow but slightly different
-              const speedRatio = speed / proj.initialSpeed;
-              const sizeMultiplier = 1.3; // Same size increase
-              const tracerLength = TRACER_LENGTH * speedRatio * SCALE * game.camera.zoom * sizeMultiplier * 0.8; // Slightly smaller than player
-              const tracerWidth = TRACER_WIDTH * speedRatio * SCALE * game.camera.zoom * sizeMultiplier * 0.8;
-              
-              // Yellow-orange tracer with glow
-              ctx.shadowColor = '#FFAA00';
-              ctx.shadowBlur = 6 * game.camera.zoom;
-              
-              // Gradient for enemy tracers
-              const gradient = ctx.createLinearGradient(-tracerLength/2, 0, tracerLength/2, 0);
-              gradient.addColorStop(0, `rgba(255, 200, 0, ${Math.max(0.4, 0.6 * speedRatio)})`);
-              gradient.addColorStop(0.5, `rgba(255, 255, 0, ${Math.max(0.8, 1.0 * speedRatio)})`);
-              gradient.addColorStop(1, `rgba(255, 200, 0, ${Math.max(0.4, 0.6 * speedRatio)})`);
-              ctx.fillStyle = gradient;
-              ctx.fillRect(-tracerLength/2, -tracerWidth/2, tracerLength, tracerWidth);
-              
-              // Add bright core
-              ctx.fillStyle = `rgba(255, 255, 200, ${Math.max(0.6, 0.9 * speedRatio)})`;
-              ctx.fillRect(-tracerLength/4, -tracerWidth/4, tracerLength/2, tracerWidth/2);
-              
-              ctx.shadowBlur = 0;
+            if (proj.type === 'tracer' && assets.loaded.tracer && assets.tracer) {
+              const scale = (TRACER_LENGTH * SCALE * game.camera.zoom) / assets.tracer.naturalWidth;
+              const drawW = assets.tracer.naturalWidth * scale;
+              const drawH = assets.tracer.naturalHeight * scale;
+              ctx.drawImage(assets.tracer, -drawW/2, -drawH/2, drawW, drawH);
+            } else if (proj.type === 'bullet' && assets.loaded.bullet && assets.bullet) {
+              const size = BULLET_SIZE * SCALE * game.camera.zoom;
+              ctx.drawImage(assets.bullet, -size/2, -size/2, size, size);
             } else {
-            // Enemy bullets - red colored
-            const bulletSize = 3 * SCALE * game.camera.zoom;
-            ctx.fillStyle = '#FF4444'; // Red enemy bullets
-            ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
+              // Fallback
+              const bulletSize = 3 * SCALE * game.camera.zoom;
+              ctx.fillStyle = proj.type === 'tracer' ? '#FFFF66' : '#FF4444';
+              ctx.fillRect(-bulletSize/2, -bulletSize/2, bulletSize, bulletSize);
             }
             
             ctx.restore();
