@@ -18,11 +18,11 @@
     async loadData() {
       try {
         // Load upgrades data
-        const upgradesResponse = await fetch('./data/upgrades.json');
+        const upgradesResponse = await fetch('./web/data/upgrades.json');
         this.upgradesData = await upgradesResponse.json();
         
         // Load modifications data
-        const modsResponse = await fetch('./data/modifications.json');
+        const modsResponse = await fetch('./web/data/modifications.json');
         this.modificationsData = await modsResponse.json();
         
         console.log('🔧 Upgrade system data loaded');

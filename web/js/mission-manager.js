@@ -24,7 +24,7 @@
     
     async loadMissionData() {
       try {
-        const response = await fetch('./data/missions.json');
+        const response = await fetch('./web/data/missions.json');
         this.missionData = await response.json();
         console.log('📋 Mission data loaded');
       } catch (error) {
