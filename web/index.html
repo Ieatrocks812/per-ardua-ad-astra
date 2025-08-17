@@ -2074,9 +2074,13 @@
               return;
             }
             
-            // DISABLED: Mid-air collisions should not cause damage
-            // Player should only take damage from projectiles
-            return;
+            // Direct collision damage: only on actual physical impact, not proximity
+            console.log('💥 Direct collision with enemy aircraft!');
+            game.playerHealth = Math.max(0, game.playerHealth - 2); // Higher damage for direct collision
+            enemy.health = Math.max(0, enemy.health - 3);
+            if (game.playerHealth <= 0) {
+              game.crashed = true;
+            }
             
             // Destroy enemy if killed
             if (enemy.health <= 0) {
