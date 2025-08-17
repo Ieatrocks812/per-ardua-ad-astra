@@ -1207,10 +1207,9 @@
             while (rel < -Math.PI) rel += 2 * Math.PI;
             if (Math.abs(rel) > mount.arc) return;
             
-            // Random defensive fire when player is near: ignore precise lead
-            const baseAngle = Math.atan2(playerPos.y - gunPos.y, playerPos.x - gunPos.x);
-            const randomSpread = (Math.random() - 0.5) * 0.6; // Wide spread
-            let firingAngle = baseAngle + randomSpread;
+            // Random defensive fire when player is near: completely random direction within arc
+            const randomRel = (Math.random() - 0.5) * 2 * mount.arc;
+            let firingAngle = angle + randomRel;
             
             // Avoid friendly fire
             const friendlyNear = game.enemies.some(other => {
@@ -2075,13 +2074,9 @@
               return;
             }
             
-            // Apply proximity collision only as damage, not instant crash
-            game.playerHealth = Math.max(0, game.playerHealth - 1);
-            game.playerCollisionCooldownUntil = now + 1500; // 1.5s grace
-            enemy.health = Math.max(0, enemy.health - 1);
-            if (game.playerHealth <= 0) {
-              game.crashed = true;
-            }
+            // DISABLED: Mid-air collisions should not cause damage
+            // Player should only take damage from projectiles
+            return;
             
             // Destroy enemy if killed
             if (enemy.health <= 0) {
