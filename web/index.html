@@ -872,6 +872,20 @@
             game.crashed = false;
             console.log('❤️ Player fully healed');
           }
+          if (key === 'equal' || key === 'plus') {
+            // Increase max health (debug only)
+            game.playerMaxHealth++;
+            game.playerHealth = game.playerMaxHealth; // Also heal to new max
+            console.log(`❤️ Max health increased to ${game.playerMaxHealth}`);
+          }
+          if (key === 'minus') {
+            // Decrease max health (debug only)
+            if (game.playerMaxHealth > 1) {
+              game.playerMaxHealth--;
+              game.playerHealth = Math.min(game.playerHealth, game.playerMaxHealth);
+              console.log(`❤️ Max health decreased to ${game.playerMaxHealth}`);
+            }
+          }
         }
         
         // Toggle inverted flight mode
@@ -3144,9 +3158,12 @@
               <div>8. Spawn Enemies</div>
               <div>9. Clear All Enemies</div>
               <div>0. Heal Player</div>
+              <div>+/= Increase Max Health (${game.playerMaxHealth})</div>
+              <div>- Decrease Max Health</div>
             </div>
             <div style="margin-top: 10px; color: #ccc; font-size: 12px;">
-              Press number keys to toggle options
+              Press number keys to toggle options<br/>
+              Current Health: ${game.playerHealth}/${game.playerMaxHealth}
             </div>
           `;
         } else {
@@ -3222,6 +3239,52 @@
           const physicsDiv = document.querySelector('.physics-display');
           if (physicsDiv) physicsDiv.remove();
         }
+        
+        // Health bar display (always visible)
+        const healthBarDiv = document.querySelector('.health-bar') || (() => {
+          const div = document.createElement('div');
+          div.className = 'health-bar';
+          div.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-family: monospace;
+            font-size: 14px;
+            color: white;
+            z-index: 1000;
+            min-width: 200px;
+            text-align: center;
+          `;
+          document.body.appendChild(div);
+          return div;
+        })();
+        
+        // Calculate health percentage
+        const healthPercent = (game.playerHealth / game.playerMaxHealth) * 100;
+        const healthColor = healthPercent > 60 ? '#00ff00' : healthPercent > 30 ? '#ffff00' : '#ff0000';
+        
+        healthBarDiv.innerHTML = `
+          <div style="margin-bottom: 4px; font-size: 12px;">HEALTH</div>
+          <div style="background: #333; border-radius: 5px; height: 8px; position: relative; overflow: hidden;">
+            <div style="
+              background: linear-gradient(90deg, ${healthColor}, ${healthColor}dd);
+              height: 100%;
+              width: ${healthPercent}%;
+              border-radius: 5px;
+              transition: width 0.3s ease, background 0.3s ease;
+            "></div>
+          </div>
+          <div style="margin-top: 4px; font-size: 12px;">
+            ${game.playerHealth}/${game.playerMaxHealth} HP
+            ${game.crashed ? ' - CRASHED' : ''}
+            ${game.debug.godMode ? ' - GOD MODE' : ''}
+          </div>
+        `;
       }
       
       function updateCamera() {
