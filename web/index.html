@@ -1737,9 +1737,9 @@
               const gravityCounterForce = enemy.body.getMass() * 9.81 * liftMultiplier * (1 - enemy.liftReduction * 0.5);
               enemy.body.applyForceToCenter(pl.Vec2(0, -gravityCounterForce), true);
               
-              // Drag - reduce for Ju-88s to let them cruise easier
-              const baseDrag = enemy.type === 'ju88' ? 0.003 : 0.01; // Lower drag for Ju-88s
-              const inducedScale = enemy.type === 'ju88' ? 0.004 : 0.01; // Lower induced drag for Ju-88s
+              // Drag - very low for Ju-88s to make them less stable and prone to crashing
+              const baseDrag = enemy.type === 'ju88' ? 0.001 : 0.01; // Much lower drag for Ju-88s
+              const inducedScale = enemy.type === 'ju88' ? 0.002 : 0.01; // Much lower induced drag for Ju-88s
               const dragCoeff = baseDrag + Math.abs(liftCoeff) * inducedScale;
               const drag = q * wingArea * dragCoeff;
               const dragForce = pl.Vec2(-vel.x / speed * drag, -vel.y / speed * drag);
@@ -2272,17 +2272,34 @@
             
             console.log(`💥 Enemy ground collision! Vertical: ${verticalSpeed.toFixed(1)} m/s, Total: ${totalSpeed.toFixed(1)} m/s`);
             
-            // Enemy takes damage based on impact speed
+            // Enemy takes damage based on impact speed (Ju-88s are more fragile)
             let damage = 0;
-            if (verticalSpeed > 15) {
-              damage = 5; // High speed impact - major damage
-              console.log('💥 Enemy heavy ground impact - major damage!');
-            } else if (verticalSpeed > 8) {
-              damage = 3; // Medium speed impact - moderate damage
-              console.log('💥 Enemy moderate ground impact - damage taken!');
-            } else if (verticalSpeed > 3) {
-              damage = 1; // Low speed impact - minor damage
-              console.log('💥 Enemy light ground contact - minor damage!');
+            const isJu88 = enemyData?.enemy?.type === 'ju88';
+            
+            if (isJu88) {
+              // Ju-88s are much more fragile on ground impact
+              if (verticalSpeed > 8) {
+                damage = 10; // High speed impact - explosive damage for Ju-88s
+                console.log('💥 Ju-88 heavy ground impact - explosive damage!');
+              } else if (verticalSpeed > 4) {
+                damage = 6; // Medium speed impact - major damage for Ju-88s
+                console.log('💥 Ju-88 moderate ground impact - major damage!');
+              } else if (verticalSpeed > 2) {
+                damage = 3; // Low speed impact - still significant damage for Ju-88s
+                console.log('💥 Ju-88 light ground impact - damage taken!');
+              }
+            } else {
+              // BF-109s are more resilient (original values)
+              if (verticalSpeed > 15) {
+                damage = 5; // High speed impact - major damage
+                console.log('💥 BF-109 heavy ground impact - major damage!');
+              } else if (verticalSpeed > 8) {
+                damage = 3; // Medium speed impact - moderate damage
+                console.log('💥 BF-109 moderate ground impact - damage taken!');
+              } else if (verticalSpeed > 3) {
+                damage = 1; // Low speed impact - minor damage
+                console.log('💥 BF-109 light ground contact - minor damage!');
+              }
             }
             
             if (damage > 0) {
