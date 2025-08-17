@@ -374,8 +374,8 @@
           return distance < 4; // Smaller than enemy aircraft
         }
         
-        // Calculate sprite dimensions in world space (same as player rendering)
-        const basePlayerSize = 0.4; // Same scale factor as in rendering
+        // Calculate sprite dimensions in world space (tighter hitbox for more precise hits)
+        const basePlayerSize = 0.25; // Smaller hitbox - was 0.4, now 37% smaller
         const playerWidth = sprite.naturalWidth * basePlayerSize;
         const playerHeight = sprite.naturalHeight * basePlayerSize;
         
@@ -420,7 +420,7 @@
         else if (game.inverted && !game.gearDown) playerSprite = assets.spitfireInverted;
         else if (!game.inverted && game.gearDown) playerSprite = assets.spitfireGear;
         else playerSprite = assets.spitfire;
-        const basePlayerSize = 0.4;
+        const basePlayerSize = 0.25; // Match the tighter hitbox from pixel collision
         const playerWidth = playerSprite ? playerSprite.naturalWidth * basePlayerSize : 8;
         const playerHeight = playerSprite ? playerSprite.naturalHeight * basePlayerSize : 3;
         
@@ -3066,7 +3066,7 @@
           }
           
           if (playerSprite) {
-            const scale = 0.4 * game.camera.zoom;
+            const scale = 0.25 * game.camera.zoom; // Match the actual collision hitbox size
             const w = playerSprite.naturalWidth * scale;
             const h = playerSprite.naturalHeight * scale;
             
