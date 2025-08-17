@@ -1604,14 +1604,35 @@
             while (normalizedAngleDiff < -Math.PI) normalizedAngleDiff += 2 * Math.PI;
             
               // Apply correction torque to maintain target angle (heading + altitude)
-              if (Math.abs(normalizedAngleDiff) > 0.02) { // 1.1 degree deadband for precise control
+              const bf109HeavilyDamaged = (enemy.type === 'bf109') && (enemy.onFire || enemy.liftReduction > 0.5 || enemy.thrustReduction > 0.6);
+              if (Math.abs(normalizedAngleDiff) > 0.02 && !bf109HeavilyDamaged) { // 1.1 degree deadband for precise control
                 const correctionTorque = normalizedAngleDiff * 40000; // Much stronger correction for altitude control
-              enemy.body.applyTorque(correctionTorque, true);
+                enemy.body.applyTorque(correctionTorque, true);
+              }
+
+              // If BF-109 is heavily damaged, clamp spin and reduce angular velocity instead of adding torque
+              if (bf109HeavilyDamaged) {
+                const w = enemy.body.getAngularVelocity();
+                const maxW = 1.0; // rad/s
+                const clamped = Math.max(-maxW, Math.min(maxW, w));
+                enemy.body.setAngularVelocity(clamped * 0.9);
+                // Keep some forward force so it doesn't rotate in place
+                const ang = enemy.body.getAngle();
+                const forward = Math.max(5000, (1 - enemy.thrustReduction) * 15000);
+                enemy.body.applyForceToCenter(pl.Vec2(Math.cos(ang) * forward, Math.sin(ang) * forward), true);
               }
             } else {
-              // Crashing: Force nose down and lose control
-              const crashTorque = 30000; // Continuous downward pitch
-              enemy.body.applyTorque(crashTorque, true);
+              // Crashing
+              if (enemy.type !== 'bf109') {
+                const crashTorque = 30000; // Continuous downward pitch for bombers
+                enemy.body.applyTorque(crashTorque, true);
+              } else {
+                // For BF-109s: clamp/damp spin and glide instead of spinning around a point
+                const w = enemy.body.getAngularVelocity();
+                const maxW = 1.0;
+                const clamped = Math.max(-maxW, Math.min(maxW, w));
+                enemy.body.setAngularVelocity(clamped * 0.9);
+              }
             }
           });
         }
