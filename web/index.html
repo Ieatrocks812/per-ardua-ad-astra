@@ -756,6 +756,8 @@
         showCollision: false,
         showPixelCollision: false,
         crashed: false,
+        playerHealth: 5,
+        playerMaxHealth: 5,
         inverted: false,
         gearDown: false,
         onGround: false, // Track if aircraft is on ground
@@ -1135,12 +1137,15 @@
           const vel = enemy.body.getLinearVelocity();
           const angle = enemy.body.getAngle();
           
-          // Calculate gun position (forward of enemy aircraft)
-          const gunForward = 2.0;
-          const gunPos = {
-            x: pos.x + Math.cos(angle) * gunForward,
-            y: pos.y + Math.sin(angle) * gunForward
-          };
+          // Define gun mounts (Ju-88 has defensive turrets)
+          const gunMounts = [];
+          if (enemy.type === 'ju88') {
+            gunMounts.push({ offset: { x: 2.0, y: 0 }, arc: Math.PI / 3 });          // Front
+            gunMounts.push({ offset: { x: -0.5, y: -1.0 }, arc: Math.PI / 2 });      // Top
+            gunMounts.push({ offset: { x: -2.0, y: 0 }, arc: Math.PI / 2 });         // Rear
+          } else {
+            gunMounts.push({ offset: { x: 2.0, y: 0 }, arc: Math.PI / 6 });          // Fighter forward guns
+          }
           
           // Calculate bullet velocity with lead prediction
           const playerPos = aircraft.getPosition();
@@ -1174,20 +1179,68 @@
             y: vel.y + Math.sin(actualAngle) * muzzleVelocity
           };
           
-          // Create enemy projectile
-          if (!game.enemyProjectiles) {
-            game.enemyProjectiles = [];
-          }
+          if (!game.enemyProjectiles) game.enemyProjectiles = [];
           
-          game.enemyProjectiles.push({
-            x: gunPos.x,
-            y: gunPos.y,
-            vx: bulletVel.x,
-            vy: bulletVel.y,
-            type: Math.random() < 0.25 ? 'tracer' : 'bullet', // 25% tracers
-            life: 3.0, // 3 seconds max flight time
-            initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y),
-            owner: enemy // Track who fired it
+          gunMounts.forEach(() => { /* placeholder to keep structure if no mount loop below */ });
+          
+          gunMounts.forEach((mount) => {
+            // Mount world position
+            const gunPos = {
+              x: pos.x + Math.cos(angle) * mount.offset.x - Math.sin(angle) * mount.offset.y,
+              y: pos.y + Math.sin(angle) * mount.offset.x + Math.cos(angle) * mount.offset.y
+            };
+            // Angle to player
+            const toPlayerAngle = Math.atan2(playerPos.y - gunPos.y, playerPos.x - gunPos.x);
+            // Check arc limits
+            let rel = toPlayerAngle - angle;
+            while (rel > Math.PI) rel -= 2 * Math.PI;
+            while (rel < -Math.PI) rel += 2 * Math.PI;
+            if (Math.abs(rel) > mount.arc) return;
+            
+            // Lead (aces)
+            let leadFactor = 0;
+            if (enemy.skillLevel === 'ace') {
+              const bulletSpeed = 350;
+              const timeToTarget = distance / bulletSpeed;
+              leadFactor = timeToTarget * 0.5;
+            }
+            const predictedX = playerPos.x + playerVel.x * leadFactor;
+            const predictedY = playerPos.y + playerVel.y * leadFactor;
+            let firingAngle = Math.atan2(predictedY - gunPos.y, predictedX - gunPos.x);
+            
+            // Avoid friendly fire
+            const friendlyNear = game.enemies.some(other => {
+              if (other === enemy || other.destroyed) return false;
+              const o = other.body.getPosition();
+              const along = (o.x - gunPos.x) * Math.cos(firingAngle) + (o.y - gunPos.y) * Math.sin(firingAngle);
+              if (along <= 0 || along > 150) return false;
+              const perp = Math.abs(-(o.x - gunPos.x) * Math.sin(firingAngle) + (o.y - gunPos.y) * Math.cos(firingAngle));
+              return perp < 10;
+            });
+            if (friendlyNear) return;
+            
+            // Spread
+            const spread = enemy.skillLevel === 'ace' ? 0.02 : 0.05;
+            const actualAngle = firingAngle + (Math.random() - 0.5) * spread;
+            const muzzleVelocity = 350;
+            const bulletVel = {
+              x: vel.x + Math.cos(actualAngle) * muzzleVelocity,
+              y: vel.y + Math.sin(actualAngle) * muzzleVelocity
+            };
+            
+            enemy._shotIndex = (enemy._shotIndex || 0) + 1;
+            const isTracer = (enemy._shotIndex % 2 === 0);
+            
+            game.enemyProjectiles.push({
+              x: gunPos.x,
+              y: gunPos.y,
+              vx: bulletVel.x,
+              vy: bulletVel.y,
+              type: isTracer ? 'tracer' : 'bullet',
+              life: 3.0,
+              initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y),
+              owner: enemy
+            });
           });
           
           // Play enemy gunfire sound (quieter than player)
@@ -1810,8 +1863,14 @@
           // Remove projectile
           game.enemyProjectiles.splice(projIndex, 1);
           
-          // TODO: Add player damage system here
-          console.log('⚠️ Player damage system not implemented yet');
+          // Player damage system
+          // Use hit points: each hit removes 1 (both bullet and tracer)
+          const damage = 1;
+          game.playerHealth = Math.max(0, game.playerHealth - damage);
+          if (game.playerHealth <= 0 && !game.crashed) {
+            console.log('💀 Player destroyed!');
+            game.crashed = true;
+          }
         }
       }
       
