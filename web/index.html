@@ -51,7 +51,7 @@
   </div>
   
   <div class="controls">
-    W/S: Throttle • A: Pitch Up • D: Pitch Down • Q/E: Zoom • Arrows: Roll • F: Flip • G: Gear • Space: Fire • C: Physics Debug • V: Pixel Debug • R: Reset
+    W/S: Throttle • A/D: Fast Pitch • Q/E: Slow Pitch • Arrows: Roll • F: Flip • G: Gear • Space: Fire • Mouse Wheel: Zoom • C: Physics Debug • V: Pixel Debug • R: Reset
   </div>
 
   <!-- Start Screen -->
@@ -236,6 +236,7 @@
       
       // Pixel-perfect collision system
       const spritePixelData = new Map();
+      const spriteColoredBounds = new Map(); // Store actual colored bounds for each sprite
       
       function extractSpritePixelData(image, name) {
         if (!image || !image.complete || image.naturalWidth === 0) return null;
@@ -257,8 +258,50 @@
             data: imageData.data
           };
           
+          // Calculate actual colored bounds (non-transparent pixels with color)
+          let minX = tempCanvas.width, maxX = 0, minY = tempCanvas.height, maxY = 0;
+          let hasColoredPixels = false;
+          
+          for (let y = 0; y < tempCanvas.height; y++) {
+            for (let x = 0; x < tempCanvas.width; x++) {
+              const idx = (y * tempCanvas.width + x) * 4;
+              const red = imageData.data[idx];
+              const green = imageData.data[idx + 1];
+              const blue = imageData.data[idx + 2];
+              const alpha = imageData.data[idx + 3];
+              
+              // Check for colored, opaque pixels
+              const hasColor = (red > 10 || green > 10 || blue > 10);
+              const isOpaque = alpha > 128;
+              
+              if (hasColor && isOpaque) {
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+                hasColoredPixels = true;
+              }
+            }
+          }
+          
+          // Store colored bounds
+          const coloredBounds = hasColoredPixels ? {
+            left: minX,
+            right: maxX,
+            top: minY,
+            bottom: maxY,
+            width: maxX - minX + 1,
+            height: maxY - minY + 1
+          } : {
+            left: 0, right: tempCanvas.width - 1,
+            top: 0, bottom: tempCanvas.height - 1,
+            width: tempCanvas.width,
+            height: tempCanvas.height
+          };
+          
           spritePixelData.set(name, pixelData);
-          console.log(`🎯 Extracted pixel data for ${name}: ${pixelData.width}x${pixelData.height}`);
+          spriteColoredBounds.set(name, coloredBounds);
+          console.log(`🎯 Extracted pixel data for ${name}: ${pixelData.width}x${pixelData.height}, colored bounds: ${coloredBounds.width}x${coloredBounds.height} at (${coloredBounds.left},${coloredBounds.top})`);
           return pixelData;
         } catch (error) {
           console.log(`⚠️ Failed to extract pixel data for ${name}:`, error);
@@ -334,15 +377,21 @@
         
         // Get pixel at the calculated position
         const pixelIndex = (Math.floor(spriteY) * pixelData.width + Math.floor(spriteX)) * 4;
-        const alpha = pixelData.data[pixelIndex + 3]; // Alpha channel
+        const red = pixelData.data[pixelIndex];
+        const green = pixelData.data[pixelIndex + 1];
+        const blue = pixelData.data[pixelIndex + 2];
+        const alpha = pixelData.data[pixelIndex + 3];
         
         // Debug: Log collision attempts and alpha values
         if (game.showPixelCollision) {
-          console.log(`🎯 Pixel check: sprite=${spriteName} pos=(${spriteX.toFixed(1)}, ${spriteY.toFixed(1)}) alpha=${alpha} threshold=200`);
+          console.log(`🎯 Enemy pixel check: sprite=${spriteName} pos=(${spriteX.toFixed(1)}, ${spriteY.toFixed(1)}) alpha=${alpha} hasColor=${red > 10 || green > 10 || blue > 10}`);
         }
         
-        // Consider pixel hit if alpha > threshold (not transparent)
-        return alpha > 200; // Higher threshold - only hit solid/opaque parts
+        // Must have both significant alpha AND actual color content
+        const hasColor = (red > 10 || green > 10 || blue > 10); // Not pure black/transparent
+        const isOpaque = alpha > 128; // At least 50% opacity
+        
+        return hasColor && isOpaque;
       }
       
       function checkPlayerPixelCollision(projX, projY) {
@@ -369,20 +418,42 @@
         const pixelData = spritePixelData.get(spriteName);
         
         if (!sprite || !pixelData) {
-          // Fallback to distance-based collision if no pixel data
+          // Fallback to very small distance-based collision if no pixel data
           const distance = Math.sqrt((projX - pos.x) * (projX - pos.x) + (projY - pos.y) * (projY - pos.y));
           console.log(`⚠️ Using fallback player collision (no pixel data). Distance: ${distance.toFixed(2)}`);
-          return distance < 1.5; // Much smaller fallback - was 4, now 3m visual instead of 8m
+          return distance < 0.8; // Very small fallback - only 1.6m visual radius
         }
         
-        // Calculate sprite dimensions in world space (tighter hitbox for more precise hits)
-        const basePlayerSize = 0.25; // Smaller hitbox - was 0.4, now 37% smaller
-        const playerWidth = sprite.naturalWidth * basePlayerSize;
-        const playerHeight = sprite.naturalHeight * basePlayerSize;
+        // Use colored bounds instead of full sprite dimensions for much more accurate collision
+        const coloredBounds = spriteColoredBounds.get(spriteName);
+        const basePlayerSize = 0.4; // Use full rendering scale since we're using actual colored bounds
+        
+        let playerWidth, playerHeight, boundsOffsetX, boundsOffsetY;
+        if (coloredBounds) {
+          // Use actual colored pixel bounds
+          playerWidth = coloredBounds.width * basePlayerSize;
+          playerHeight = coloredBounds.height * basePlayerSize;
+          
+          // Calculate offset from sprite center to colored bounds center
+          const coloredCenterX = (coloredBounds.left + coloredBounds.right) / 2;
+          const coloredCenterY = (coloredBounds.top + coloredBounds.bottom) / 2;
+          const spriteCenterX = sprite.naturalWidth / 2;
+          const spriteCenterY = sprite.naturalHeight / 2;
+          
+          boundsOffsetX = (coloredCenterX - spriteCenterX) * basePlayerSize;
+          boundsOffsetY = (coloredCenterY - spriteCenterY) * basePlayerSize;
+        } else {
+          // Fallback to full sprite (shouldn't happen)
+          playerWidth = sprite.naturalWidth * basePlayerSize;
+          playerHeight = sprite.naturalHeight * basePlayerSize;
+          boundsOffsetX = 0;
+          boundsOffsetY = 0;
+        }
         
         // Transform projectile position to local sprite coordinates
-        const dx = projX - pos.x;
-        const dy = projY - pos.y;
+        // Account for the offset between sprite center and colored bounds center
+        const dx = projX - (pos.x + boundsOffsetX);
+        const dy = projY - (pos.y + boundsOffsetY);
         
         // Reverse rotation (rotate by -angle)
         const cosA = Math.cos(-angle);
@@ -391,21 +462,58 @@
         const rotatedY = dx * sinA + dy * cosA;
         
         // Convert from world coordinates to sprite pixel coordinates
-        // Player sprite is rendered from -w/2 to +w/2, -h/2 to +h/2
-        const spriteX = (rotatedX + playerWidth / 2) * (pixelData.width / playerWidth);
-        const spriteY = (rotatedY + playerHeight / 2) * (pixelData.height / playerHeight);
-        
-        // Check if coordinates are within sprite bounds
-        if (spriteX < 0 || spriteX >= pixelData.width || spriteY < 0 || spriteY >= pixelData.height) {
-          return false;
+        // Map to the colored bounds within the sprite
+        if (coloredBounds) {
+          const localX = rotatedX + playerWidth / 2;
+          const localY = rotatedY + playerHeight / 2;
+          
+          const spriteX = coloredBounds.left + (localX / playerWidth) * coloredBounds.width;
+          const spriteY = coloredBounds.top + (localY / playerHeight) * coloredBounds.height;
+          
+          // Check if coordinates are within colored bounds
+          if (spriteX < coloredBounds.left || spriteX > coloredBounds.right || 
+              spriteY < coloredBounds.top || spriteY > coloredBounds.bottom) {
+            return false;
+          }
+          
+          // Get pixel at the calculated position
+          const pixelIndex = (Math.floor(spriteY) * pixelData.width + Math.floor(spriteX)) * 4;
+          const red = pixelData.data[pixelIndex];
+          const green = pixelData.data[pixelIndex + 1];
+          const blue = pixelData.data[pixelIndex + 2];
+          const alpha = pixelData.data[pixelIndex + 3];
+          
+          // Debug logging
+          if (game.showPixelCollision) {
+            console.log(`🎯 Colored bounds check: sprite=${spriteName} bounds=(${spriteX.toFixed(1)}, ${spriteY.toFixed(1)}) alpha=${alpha} hasColor=${red > 10 || green > 10 || blue > 10}`);
+          }
+          
+          // Must have both significant alpha AND actual color content
+          const hasColor = (red > 10 || green > 10 || blue > 10);
+          const isOpaque = alpha > 128;
+          
+          return hasColor && isOpaque;
+        } else {
+          // Fallback to old method
+          const spriteX = (rotatedX + playerWidth / 2) * (pixelData.width / playerWidth);
+          const spriteY = (rotatedY + playerHeight / 2) * (pixelData.height / playerHeight);
+          
+          if (spriteX < 0 || spriteX >= pixelData.width || spriteY < 0 || spriteY >= pixelData.height) {
+            return false;
+          }
+          
+          const pixelIndex = (Math.floor(spriteY) * pixelData.width + Math.floor(spriteX)) * 4;
+          const red = pixelData.data[pixelIndex];
+          const green = pixelData.data[pixelIndex + 1];
+          const blue = pixelData.data[pixelIndex + 2];
+          const alpha = pixelData.data[pixelIndex + 3];
+          
+          const hasColor = (red > 10 || green > 10 || blue > 10);
+          const isOpaque = alpha > 128;
+          
+          return hasColor && isOpaque;
         }
-        
-        // Get pixel at the calculated position
-        const pixelIndex = (Math.floor(spriteY) * pixelData.width + Math.floor(spriteX)) * 4;
-        const alpha = pixelData.data[pixelIndex + 3]; // Alpha channel
-        
-        // Consider pixel hit if alpha > threshold (not transparent)
-        return alpha > 50; // Threshold for semi-transparent areas
+
       }
 
       // Pixel-perfect plane vs plane overlap test
@@ -791,7 +899,8 @@
           showConsole: false,
           isPaused: false,
           mouseInspect: false,
-          hoverData: null
+          hoverData: null,
+          showSpriteBounds: false
         },
         debugConsole: {
           messages: [],
@@ -990,6 +1099,11 @@
             // Toggle mouse inspect mode
             game.debug.mouseInspect = !game.debug.mouseInspect;
             console.log('🔍 Mouse inspect:', game.debug.mouseInspect ? 'ON' : 'OFF');
+          }
+          if (key === 'b') {
+            // Toggle sprite bounds display
+            game.debug.showSpriteBounds = !game.debug.showSpriteBounds;
+            console.log('🖼️ Sprite bounds:', game.debug.showSpriteBounds ? 'ON' : 'OFF');
           }
         }
         
@@ -2455,14 +2569,14 @@
         const angle = aircraft.getAngle();
         
         // Controls
-        const pitchUp = game.keys.has('a');
-        const pitchDown = game.keys.has('d');
+        const pitchUpFast = game.keys.has('a');      // A = Fast pitch up
+        const pitchDownFast = game.keys.has('d');    // D = Fast pitch down
+        const pitchUpSlow = game.keys.has('q');      // Q = Slow pitch up (was zoom out)
+        const pitchDownSlow = game.keys.has('e');    // E = Slow pitch down (was zoom in)
         const rollLeft = game.keys.has('arrowleft');
         const rollRight = game.keys.has('arrowright');
         const throttleUp = game.keys.has('w');
         const throttleDown = game.keys.has('s');
-        const zoomIn = game.keys.has('e');
-        const zoomOut = game.keys.has('q');
         const reset = game.keys.has('r');
         
         // Reset
@@ -2488,9 +2602,7 @@
         if (throttleUp) game.throttle = Math.min(1.0, game.throttle + dt * 0.6);
         if (throttleDown) game.throttle = Math.max(0.0, game.throttle - dt * 0.8);
         
-        // Zoom
-        if (zoomIn) game.camera.zoom = Math.min(game.camera.maxZoom, game.camera.zoom + dt * 1.2);
-        if (zoomOut) game.camera.zoom = Math.max(game.camera.minZoom, game.camera.zoom - dt * 1.2);
+        // Zoom is now handled by mouse wheel only (Q/E now used for slow pitch)
         
         // Calculate speed once for use in both controls and aerodynamics
         const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
@@ -2499,16 +2611,33 @@
         const controlEffectiveness = Math.min(speed * 0.1, 1.0); // Controls more effective at higher speeds
         const controlTorque = 20000 * controlEffectiveness; // Moderate torque for reliable control
         
-        // Debug control inputs
-        if (Math.random() < 0.02) { // Occasional debug logging
-          console.log('🎮 Controls:', { pitchUp, pitchDown, rollLeft, rollRight, effectiveness: controlEffectiveness.toFixed(2) });
+        // Pitch controls - immediate stop when no input
+        const anyPitchInput = pitchUpFast || pitchDownFast || pitchUpSlow || pitchDownSlow;
+        
+        if (!anyPitchInput) {
+          // Immediate stop - apply counter-torque to stop rotation
+          const currentAngularVel = aircraft.getAngularVelocity();
+          const stopTorque = -currentAngularVel * 800; // Strong damping for instant stop
+          aircraft.applyTorque(stopTorque, true);
+        } else {
+          // Apply pitch input
+          if (pitchUpFast) {
+            aircraft.applyTorque(-controlTorque, true); // Full speed up
+          }
+          if (pitchDownFast) {
+            aircraft.applyTorque(controlTorque, true);  // Full speed down
+          }
+          if (pitchUpSlow) {
+            aircraft.applyTorque(-controlTorque * 0.3, true); // 30% speed up
+          }
+          if (pitchDownSlow) {
+            aircraft.applyTorque(controlTorque * 0.3, true);  // 30% speed down
+          }
         }
         
-        if (pitchUp) {
-          aircraft.applyTorque(-controlTorque, true);
-        }
-        if (pitchDown) {
-          aircraft.applyTorque(controlTorque, true);
+        // Debug control inputs
+        if (Math.random() < 0.02) { // Occasional debug logging
+          console.log('🎮 Controls:', { fastUp: pitchUpFast, fastDown: pitchDownFast, slowUp: pitchUpSlow, slowDown: pitchDownSlow, effectiveness: controlEffectiveness.toFixed(2) });
         }
         if (rollLeft) {
           aircraft.applyTorque(-controlTorque * 0.6, true);
@@ -3189,13 +3318,46 @@
           }
           
           if (playerSprite) {
-            const scale = 0.25 * game.camera.zoom; // Match the actual collision hitbox size
-            const w = playerSprite.naturalWidth * scale;
-            const h = playerSprite.naturalHeight * scale;
+            // Get the appropriate sprite name for colored bounds
+            let spriteName;
+            if (game.inverted && game.gearDown) {
+              spriteName = 'spitfireInvertedGear';
+            } else if (game.inverted && !game.gearDown) {
+              spriteName = 'spitfireInverted';
+            } else if (!game.inverted && game.gearDown) {
+              spriteName = 'spitfireGear';
+            } else {
+              spriteName = 'spitfire';
+            }
+            
+            const coloredBounds = spriteColoredBounds.get(spriteName);
+            const scale = 0.4 * game.camera.zoom; // Use actual rendering scale
             
             ctx.translate(playerScreenPos.x, playerScreenPos.y);
             ctx.rotate(playerAngle);
-            ctx.strokeRect(-w/2, -h/2, w, h);
+            
+            if (coloredBounds) {
+              // Draw only the colored bounds, not the full sprite
+              const w = coloredBounds.width * scale;
+              const h = coloredBounds.height * scale;
+              
+              // Calculate offset from sprite center to colored bounds center
+              const coloredCenterX = (coloredBounds.left + coloredBounds.right) / 2;
+              const coloredCenterY = (coloredBounds.top + coloredBounds.bottom) / 2;
+              const spriteCenterX = playerSprite.naturalWidth / 2;
+              const spriteCenterY = playerSprite.naturalHeight / 2;
+              
+              const offsetX = (coloredCenterX - spriteCenterX) * scale;
+              const offsetY = (coloredCenterY - spriteCenterY) * scale;
+              
+              ctx.strokeRect(-w/2 + offsetX, -h/2 + offsetY, w, h);
+            } else {
+              // Fallback to full sprite
+              const w = playerSprite.naturalWidth * scale;
+              const h = playerSprite.naturalHeight * scale;
+              ctx.strokeRect(-w/2, -h/2, w, h);
+            }
+            
             ctx.resetTransform();
           }
           
@@ -3308,6 +3470,7 @@
               <div>C. Console: <span style="color: ${game.debug.showConsole ? 'lime' : 'red'}">${game.debug.showConsole ? 'ON' : 'OFF'}</span></div>
               <div>P. Pause: <span style="color: ${game.debug.isPaused ? 'red' : 'lime'}">${game.debug.isPaused ? 'PAUSED' : 'RUNNING'}</span></div>
               <div>M. Mouse Inspect: <span style="color: ${game.debug.mouseInspect ? 'lime' : 'red'}">${game.debug.mouseInspect ? 'ON' : 'OFF'}</span></div>
+              <div>B. Sprite Bounds: <span style="color: ${game.debug.showSpriteBounds ? 'lime' : 'red'}">${game.debug.showSpriteBounds ? 'ON' : 'OFF'}</span></div>
             </div>
             <div style="margin-top: 10px; color: #ccc; font-size: 12px;">
               Press number keys to toggle options<br/>
@@ -3554,6 +3717,51 @@
         } else {
           const pauseDiv = document.querySelector('.pause-indicator');
           if (pauseDiv) pauseDiv.remove();
+        }
+        
+        // Debug: Draw sprite bounds (press 'B' to toggle) - shows actual PNG dimensions
+        if (game.debug.showSpriteBounds) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255, 0, 255, 0.8)'; // Magenta for sprite bounds
+          ctx.lineWidth = 1;
+          
+          // Draw player sprite bounds (actual PNG size)
+          const playerPos = aircraft.getPosition();
+          const playerAngle = aircraft.getAngle();
+          const playerScreenPos = worldToScreen(playerPos.x, playerPos.y);
+          
+          let playerSprite;
+          if (game.inverted && game.gearDown) {
+            playerSprite = assets.spitfireInvertedGear;
+          } else if (game.inverted && !game.gearDown) {
+            playerSprite = assets.spitfireInverted;
+          } else if (!game.inverted && game.gearDown) {
+            playerSprite = assets.spitfireGear;
+          } else {
+            playerSprite = assets.spitfire;
+          }
+          
+          if (playerSprite) {
+            ctx.save();
+            ctx.translate(playerScreenPos.x, playerScreenPos.y);
+            ctx.rotate(playerAngle);
+            
+            // Show actual sprite rendering size (0.4 scale for rendering)
+            const renderScale = 0.4 * game.camera.zoom;
+            const spriteWidth = playerSprite.naturalWidth * renderScale;
+            const spriteHeight = playerSprite.naturalHeight * renderScale;
+            ctx.strokeRect(-spriteWidth/2, -spriteHeight/2, spriteWidth, spriteHeight);
+            
+            // Add label
+            ctx.fillStyle = 'magenta';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`PNG: ${playerSprite.naturalWidth}x${playerSprite.naturalHeight}`, 0, spriteHeight/2 + 15);
+            
+            ctx.restore();
+          }
+          
+          ctx.restore();
         }
       }
       
