@@ -1500,76 +1500,69 @@
                 // Aces also get better turn rates and reaction times (already implemented above)
               }
             } else if (enemy.type === 'ju88' && enemy.hasGunner && !enemy.destroyed) {
-              // Ju-88 bomber defensive gunner behavior
+              // Ju-88 bomber defensive gunner behavior (random defensive fire)
               const playerPos = aircraft.getPosition();
-              const distanceToPlayer = Math.sqrt(
-                (pos.x - playerPos.x) * (pos.x - playerPos.x) + 
-                (pos.y - playerPos.y) * (pos.y - playerPos.y)
-              );
-              
+              const distanceToPlayer = Math.sqrt((pos.x - playerPos.x) ** 2 + (pos.y - playerPos.y) ** 2);
               const now = performance.now();
-              
-              // Check if player is within gunner range and behind bomber
+
+              // Stop defensive fire when heavily damaged
+              const heavilyDamaged = enemy.onFire || (enemy.health / enemy.maxHealth) <= 0.4 || enemy.liftReduction > 0.5;
+              if (heavilyDamaged) {
+                enemy.gunnerBurstRemaining = 0;
+                return;
+              }
+
               if (distanceToPlayer < enemy.gunnerRange) {
-                const angleToPlayer = Math.atan2(playerPos.y - pos.y, playerPos.x - pos.x);
-                const bomberAngle = enemy.body.getAngle();
-                
-                // Calculate relative angle (0 = directly ahead, PI = directly behind)
-                let relativeAngle = angleToPlayer - bomberAngle;
-                while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
-                while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
-                
-                // Tail gunner covers rear 120 degree arc
-                const inTailGunnerArc = Math.abs(relativeAngle) > 2 * Math.PI / 3;
-                
-                if (inTailGunnerArc) {
-                  // Start burst if cooldown expired
-                  if (enemy.gunnerBurstRemaining <= 0 && now - enemy.gunnerLastBurstTime > enemy.gunnerBurstCooldown) {
-                    enemy.gunnerBurstRemaining = enemy.gunnerBurstSize;
-                    enemy.gunnerLastBurstTime = now;
-                    console.log('🔫 Ju-88 tail gunner opening fire!');
-                  }
-                  
-                  // Fire if we have shots remaining in burst
-                  if (enemy.gunnerBurstRemaining > 0 && now - enemy.gunnerLastShotTime > enemy.gunnerShotInterval) {
-                    // Create defensive gunfire
-                    const gunPos = {
-                      x: pos.x - Math.cos(bomberAngle) * 5, // Tail position
-                      y: pos.y - Math.sin(bomberAngle) * 5
-                    };
-                    
-                    // Less accurate than fighter guns
-                    const spread = 0.1;
-                    const firingAngle = angleToPlayer + (Math.random() - 0.5) * spread;
-                    
-                    const muzzleVelocity = 350; // Slower than fighter guns
+                // Fixed 5 rounds per second
+                enemy.gunnerShotInterval = 200;
+                // Use multiple mounts with random spread
+                const mounts = [
+                  { offset: { x: 2.0, y: 0 }, arc: Math.PI / 3 },       // Front
+                  { offset: { x: -0.5, y: -1.0 }, arc: Math.PI / 2 },   // Top
+                  { offset: { x: -2.0, y: 0 }, arc: Math.PI / 2 }       // Rear
+                ];
+
+                // Fire one round per interval from a random mount
+                if (now - enemy.gunnerLastShotTime > enemy.gunnerShotInterval) {
+                  const mount = mounts[Math.floor(Math.random() * mounts.length)];
+                  const bomberAngle = enemy.body.getAngle();
+                  const gunPos = {
+                    x: pos.x + Math.cos(bomberAngle) * mount.offset.x - Math.sin(bomberAngle) * mount.offset.y,
+                    y: pos.y + Math.sin(bomberAngle) * mount.offset.x + Math.cos(bomberAngle) * mount.offset.y
+                  };
+                  // Random firing direction within mount arc
+                  const randomRel = (Math.random() - 0.5) * 2 * mount.arc;
+                  const firingAngle = bomberAngle + randomRel;
+
+                  // Avoid friendly fire corridor
+                  const friendlyNear = game.enemies.some(other => {
+                    if (other === enemy || other.destroyed) return false;
+                    const o = other.body.getPosition();
+                    const along = (o.x - gunPos.x) * Math.cos(firingAngle) + (o.y - gunPos.y) * Math.sin(firingAngle);
+                    if (along <= 0 || along > 150) return false;
+                    const perp = Math.abs(-(o.x - gunPos.x) * Math.sin(firingAngle) + (o.y - gunPos.y) * Math.cos(firingAngle));
+                    return perp < 10;
+                  });
+                  if (!friendlyNear) {
+                    const muzzleVelocity = 350;
                     const bulletVel = {
                       x: vel.x + Math.cos(firingAngle) * muzzleVelocity,
                       y: vel.y + Math.sin(firingAngle) * muzzleVelocity
                     };
-                    
-                    if (!game.enemyProjectiles) {
-                      game.enemyProjectiles = [];
-                    }
-                    
+                    if (!game.enemyProjectiles) game.enemyProjectiles = [];
+                    // 100% tracers
                     game.enemyProjectiles.push({
                       x: gunPos.x,
                       y: gunPos.y,
                       vx: bulletVel.x,
                       vy: bulletVel.y,
-                      type: 'bullet',
-                      life: 2.0, // Shorter range
+                      type: 'tracer',
+                      life: 3.0,
                       initialSpeed: Math.sqrt(bulletVel.x * bulletVel.x + bulletVel.y * bulletVel.y),
                       owner: enemy
                     });
-                    
-                    enemy.gunnerBurstRemaining--;
                     enemy.gunnerLastShotTime = now;
-                    
-                    // Play gunfire sound
-                    if (sounds.gunfire) {
-                      playSound(sounds.gunfire, 0.1);
-                    }
+                    if (sounds.gunfire) playSound(sounds.gunfire, 0.1);
                   }
                 }
               }
