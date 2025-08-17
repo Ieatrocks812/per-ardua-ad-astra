@@ -771,7 +771,8 @@
         casings: [], // ejected shells
         enemies: [], // enemy aircraft
         explosions: [], // explosion effects
-        enemyProjectiles: [] // enemy bullets
+        enemyProjectiles: [], // enemy bullets
+        playerCollisionCooldownUntil: 0
       };
       // Ensure spawn shield is set after game object exists
       if (!game.spawnShieldUntil || game.spawnShieldUntil < performance.now()) {
@@ -2059,6 +2060,10 @@
         const enemyFromB = enemyDataB?.type === 'enemy' ? enemyDataB.enemy : null;
         
         if ((isAircraftA && enemyFromB) || (isAircraftB && enemyFromA)) {
+          // Spawn shield & short collision grace: ignore mid-air collisions to avoid instant deaths
+          const now = performance.now();
+          if (now < (game.spawnShieldUntil || 0)) return;
+          if (now < (game.playerCollisionCooldownUntil || 0)) return;
           const enemy = enemyFromA || enemyFromB;
           
           if (!enemy.destroyed) {
@@ -2070,9 +2075,13 @@
               return;
             }
             
-            // Major damage to both aircraft
-            game.crashed = true;
-            enemy.health = Math.max(0, enemy.health - 7);
+            // Apply proximity collision only as damage, not instant crash
+            game.playerHealth = Math.max(0, game.playerHealth - 1);
+            game.playerCollisionCooldownUntil = now + 1500; // 1.5s grace
+            enemy.health = Math.max(0, enemy.health - 1);
+            if (game.playerHealth <= 0) {
+              game.crashed = true;
+            }
             
             // Destroy enemy if killed
             if (enemy.health <= 0) {
