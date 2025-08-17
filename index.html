@@ -2316,8 +2316,8 @@
               } else {
                 torqueMultiplier = 40000; // Higher torque for heavy bombers
                 deadband = 0.02; // Tighter control for bombers
-                const ju88HeavilyDamaged = enemy.onFire || enemy.liftReduction > 0.4 || enemy.thrustReduction > 0.5;
-                allowNormalControl = !ju88HeavilyDamaged;
+                // JU-88s always maintain normal control to stay at altitude
+                allowNormalControl = true;
               }
               
               if (Math.abs(normalizedAngleDiff) > deadband && allowNormalControl) {
@@ -2470,23 +2470,35 @@
                   return; // Skip aircraft-specific destruction logic
                 }
                 
-                enemy.thrustReduction = 1.0; // Complete thrust loss
-                enemy.liftReduction = 1.0; // Complete lift loss
-                enemy.onFire = true;
-                enemy.pitchingDown = true; // Mark for pitch down behavior
-                console.log('💥 Enemy critically damaged - pitching down to crash');
+                if (enemy.type === 'ju88') {
+                  // JU-88s maintain altitude even when destroyed
+                  enemy.thrustReduction = 0.8; // Reduced thrust but not complete loss
+                  enemy.liftReduction = 0.6; // Reduced lift but maintain some control
+                  enemy.onFire = true;
+                  enemy.pitchingDown = false; // JU-88s stay level
+                  console.log('💥 JU-88 critically damaged - maintaining altitude');
+                } else {
+                  // Other aircraft (BF-109s) still pitch down when destroyed
+                  enemy.thrustReduction = 1.0; // Complete thrust loss
+                  enemy.liftReduction = 1.0; // Complete lift loss
+                  enemy.onFire = true;
+                  enemy.pitchingDown = true; // Mark for pitch down behavior
+                  console.log('💥 Enemy critically damaged - pitching down to crash');
+                }
                 
                 // Notify mission manager of enemy destroyed
                 if (window.missionManager && window.campaignMode) {
-                  const enemyType = enemy.isAce ? 'ace' : 'bf109';
+                  const enemyType = enemy.isAce ? 'ace' : enemy.type;
                   window.missionManager.onEnemyDestroyed(enemyType);
                 }
                 
                 // Stop excessive spinning when destroyed
                 enemy.body.setAngularVelocity(0);
-                // Apply gentle nose-down force (reduced from 50000)
-                const crashTorque = 5000; // Much gentler downward pitch to avoid spinning
-                enemy.body.applyTorque(crashTorque, true);
+                // Apply gentle nose-down force only to non-JU-88s
+                if (enemy.type !== 'ju88') {
+                  const crashTorque = 5000; // Much gentler downward pitch to avoid spinning
+                  enemy.body.applyTorque(crashTorque, true);
+                }
               } else {
                               // Progressive damage based on remaining health and aircraft type
               const damageRatio = 1 - (enemy.health / enemy.maxHealth);
@@ -2525,20 +2537,12 @@
                     enemy.smoking = true;
                     console.log('💨 Ju-88 engine smoking');
                   }
-                  // JU-88s start losing stability early to ensure faster ground impact
-                  if (!enemy.pitchingDown && enemy.thrustReduction > 0.5) {
-                    enemy.pitchingDown = true;
-                    console.log('💨 JU-88 starting early descent due to engine damage');
-                  }
+                  // JU-88s maintain altitude even when damaged - removed pitching down behavior
                 }
                 
                 if (enemy.health <= 8) {
                   enemy.liftReduction = Math.min(0.5, damageRatio * 0.6);
-                  // JU-88s start pitching down when heavily damaged - made more aggressive
-                  if (!enemy.pitchingDown && (enemy.thrustReduction > 0.4 || enemy.liftReduction > 0.3)) {
-                    enemy.pitchingDown = true;
-                    console.log('💨 JU-88 losing control - starting aggressive descent');
-                  }
+                  // JU-88s maintain altitude even when heavily damaged - removed pitching down behavior
                 }
                 
                 if (enemy.health <= 4) {
