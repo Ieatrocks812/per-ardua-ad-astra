@@ -1,0 +1,96 @@
+{
+  "wingman": {
+    "combat": {
+      "engaged": [
+        "I've got one on my tail!",
+        "Breaking left!",
+        "Tally ho! Bandits at two o'clock!",
+        "Watch your six!",
+        "He's making a run on you!",
+        "Good shooting!",
+        "Splash one bandit!",
+        "They're breaking off!"
+      ],
+      "damage": [
+        "I'm hit! Engine's smoking!",
+        "Lost hydraulics, controls sluggish!",
+        "Canopy's cracked, but I'm still flying!",
+        "Wing damage, but she'll hold!"
+      ],
+      "critical": [
+        "I can't stay with you, RTB!",
+        "Engine's failing, heading home!",
+        "Too much damage, breaking off!"
+      ],
+      "bomber_spotted": [
+        "Bomber formation ahead!",
+        "Ju 88s, twelve o'clock level!",
+        "They're going for the convoy!",
+        "Watch for tail gunners!"
+      ],
+      "ace_encounter": [
+        "That's no ordinary pilot!",
+        "He's good—really good!",
+        "This one's different, stay sharp!",
+        "Ace pilot! Watch yourself!"
+      ]
+    },
+    "status": {
+      "fuel_low": [
+        "Running on fumes here!",
+        "Fuel's getting critical!",
+        "Need to RTB soon!"
+      ],
+      "ammo_low": [
+        "Running low on ammo!",
+        "Last few rounds!",
+        "Almost Winchester!"
+      ],
+      "all_clear": [
+        "Sky's clear!",
+        "No contacts on visual.",
+        "Looks quiet for now."
+      ]
+    }
+  },
+  "radio": {
+    "control": {
+      "vector": [
+        "Control: Vector 090, angels 15.",
+        "Control: Bandits reported your sector.",
+        "Control: Large formation approaching from the east."
+      ],
+      "mission": [
+        "Control: Protect the convoy at all costs.",
+        "Control: Airfield under attack, scramble!",
+        "Control: Multiple raids incoming, brace yourselves."
+      ],
+      "status": [
+        "Control: Good work out there.",
+        "Control: Return to base for refuel and rearm.",
+        "Control: Mission accomplished, well done."
+      ]
+    }
+  },
+  "enemy": {
+    "taunts": {
+      "bf109": [
+        "Achtung! Spitfire!",
+        "Für das Vaterland!",
+        "Angriff!"
+      ],
+      "ace": {
+        "black_eagle": [
+          "You face the Black Eagle!",
+          "Your luck ends today, Tommy!",
+          "I have twenty-three victories!"
+        ],
+        "red_baron_ghost": [
+          "The skies belong to me!",
+          "You cannot escape!",
+          "Feel the wrath of the Red Baron!"
+        ]
+      }
+    }
+  }
+}

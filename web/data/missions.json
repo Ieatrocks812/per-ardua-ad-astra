@@ -1,0 +1,433 @@
+{
+  "missions": [
+    {
+      "id": "M01_Tutorial",
+      "name": "Training Flight",
+      "map": "home_airfield",
+      "briefing": "Welcome to the RAF, pilot. Today we'll cover basic flight and gunnery. Show us what you've got.",
+      "win": {
+        "type": "destroy_targets",
+        "targets": ["training_dummy"],
+        "count": 3
+      },
+      "lose": [
+        {"type": "player_dead"}
+      ],
+      "rewards": {
+        "tokens": 0,
+        "passive": null,
+        "mods": ["8x303"],
+        "unlockNext": "M02_Scouting"
+      },
+      "waves": [
+        {
+          "t": 2.0,
+          "group": {
+            "type": "training_dummy",
+            "n": 3,
+            "from": "E",
+            "alt": "mid",
+            "stationary": true
+          }
+        }
+      ],
+      "ace": null,
+      "dialogue": {
+        "pre": ["Instructor: Welcome to flight training, pilot. Let's see what you can do."],
+        "mid": ["Instructor: Good shooting! Keep your aim steady."],
+        "post": ["Instructor: Well done! You're ready for combat operations."]
+      }
+    },
+    {
+      "id": "M02_Scouting",
+      "name": "Channel Patrol",
+      "map": "channel_coast",
+      "briefing": "Intelligence reports light enemy activity over the Channel. Scout the area and engage any hostiles.",
+      "win": {
+        "type": "destroy_count",
+        "count": 3
+      },
+      "lose": [
+        {"type": "player_dead"}
+      ],
+      "rewards": {
+        "tokens": 0,
+        "passive": "enemy_identification",
+        "mods": [],
+        "unlockNext": "M03_Defense_1"
+      },
+      "waves": [
+        {
+          "t": 15.0,
+          "group": {
+            "type": "bf109",
+            "n": 2,
+            "from": "E",
+            "alt": "high",
+            "behavior": "patrol"
+          }
+        },
+        {
+          "t": 60.0,
+          "group": {
+            "type": "bf109",
+            "n": 1,
+            "from": "SE",
+            "alt": "mid",
+            "behavior": "aggressive"
+          }
+        }
+      ],
+      "ace": null,
+      "dialogue": {
+        "pre": ["Wingman: Light patrol today. Should be a milk run."],
+        "mid": ["Wingman: Bandits spotted! Two o'clock high!"],
+        "post": ["Wingman: Good work. Intelligence will want to hear about this."]
+      }
+    },
+    {
+      "id": "M03_Defense_1",
+      "name": "Convoy Defense",
+      "map": "channel_coast",
+      "briefing": "A vital convoy is making for Dover. Luftwaffe bombers are inbound. Protect the ships at all costs.",
+      "win": {
+        "type": "destroy_count",
+        "count": 5
+      },
+      "lose": [
+        {"type": "player_dead"},
+        {"type": "target_destroyed", "target": "convoy"}
+      ],
+      "rewards": {
+        "tokens": 1,
+        "passive": null,
+        "mods": [],
+        "unlockNext": "M04_Defense_2_Ace"
+      },
+      "waves": [
+        {
+          "t": 10.0,
+          "group": {
+            "type": "ju88",
+            "n": 3,
+            "from": "E",
+            "alt": "mid",
+            "formation": "V",
+            "target": "convoy"
+          }
+        },
+        {
+          "t": 12.0,
+          "group": {
+            "type": "bf109",
+            "n": 2,
+            "from": "E",
+            "alt": "high",
+            "escort": "prev"
+          }
+        },
+        {
+          "t": 120.0,
+          "trigger": "convoy_health_below_50",
+          "group": {
+            "type": "bf109",
+            "n": 2,
+            "from": "NE",
+            "alt": "mid"
+          }
+        }
+      ],
+      "ace": null,
+      "dialogue": {
+        "pre": ["Wingman: Convoy's making for Dover—keep your eyes peeled."],
+        "mid": ["Wingman: Bombers sighted, two o'clock high!"],
+        "post": ["Wingman: That'll teach them to bother our lads."]
+      }
+    },
+    {
+      "id": "M04_Defense_2_Ace",
+      "name": "Airfield Raid",
+      "map": "home_airfield",
+      "briefing": "Enemy raiders incoming! Defend the airfield. Intelligence warns the Black Eagle may be leading them.",
+      "win": {
+        "type": "destroy_count",
+        "count": 6
+      },
+      "lose": [
+        {"type": "player_dead"},
+        {"type": "target_destroyed", "target": "airfield"}
+      ],
+      "rewards": {
+        "tokens": 1,
+        "passive": null,
+        "mods": ["2x20mm_4x303"],
+        "unlockNext": "M05_Patrol"
+      },
+      "waves": [
+        {
+          "t": 15.0,
+          "group": {
+            "type": "bf109",
+            "n": 3,
+            "from": "E",
+            "alt": "mid"
+          }
+        },
+        {
+          "t": 45.0,
+          "ace": {
+            "type": "bf109",
+            "name": "Black Eagle",
+            "from": "SE",
+            "alt": "high",
+            "buffs": {
+              "speed": 1.15,
+              "turnRate": 1.15,
+              "accuracy": 1.2,
+              "health": 1.5
+            }
+          }
+        },
+        {
+          "t": 120.0,
+          "group": {
+            "type": "ju88",
+            "n": 2,
+            "from": "E",
+            "alt": "low",
+            "formation": "line",
+            "target": "airfield"
+          }
+        }
+      ],
+      "dialogue": {
+        "pre": ["Wingman: Word is the 'Black Eagle' is prowling today."],
+        "mid": ["Wingman: He's on you! I'll drag him—break!"],
+        "post": ["Wingman: If he bailed, he'll be back. If not... good riddance."]
+      }
+    },
+    {
+      "id": "M05_Patrol",
+      "name": "Roaming Patrol",
+      "map": "channel_coast",
+      "briefing": "Patrol the sector and engage any enemy contacts. Stay sharp—they could come from anywhere.",
+      "win": {
+        "type": "destroy_count",
+        "count": 9
+      },
+      "lose": [
+        {"type": "player_dead"}
+      ],
+      "rewards": {
+        "tokens": 1,
+        "passive": null,
+        "mods": [],
+        "unlockNext": "M06_Defense_3"
+      },
+      "waves": [
+        {
+          "t": 10.0,
+          "group": {
+            "type": "bf109",
+            "n": 2,
+            "from": "N",
+            "alt": "high"
+          }
+        },
+        {
+          "t": 60.0,
+          "group": {
+            "type": "bf109",
+            "n": 3,
+            "from": "E",
+            "alt": "mid"
+          }
+        },
+        {
+          "t": 150.0,
+          "group": {
+            "type": "ju88",
+            "n": 2,
+            "from": "SE",
+            "alt": "low",
+            "formation": "line"
+          }
+        },
+        {
+          "t": 240.0,
+          "group": {
+            "type": "bf109",
+            "n": 2,
+            "from": "W",
+            "alt": "high"
+          }
+        }
+      ],
+      "ace": null,
+      "dialogue": {
+        "pre": ["Wingman: Moderate activity expected. Keep your head on a swivel."],
+        "mid": ["Wingman: Multiple contacts! They're coming from all directions!"],
+        "post": ["Wingman: Good hunting today. Jerry won't forget this."]
+      }
+    },
+    {
+      "id": "M06_Defense_3",
+      "name": "Big Wing",
+      "map": "london_outskirts",
+      "briefing": "Massive bomber formation approaching London. This is what we've trained for. Stop them.",
+      "win": {
+        "type": "destroy_count",
+        "count": 11
+      },
+      "lose": [
+        {"type": "player_dead"},
+        {"type": "bombers_escaped", "maxEscaped": 4}
+      ],
+      "rewards": {
+        "tokens": 1,
+        "passive": null,
+        "mods": ["4x20mm"],
+        "unlockNext": "M07_Final"
+      },
+      "waves": [
+        {
+          "t": 10.0,
+          "group": {
+            "type": "ju88",
+            "n": 4,
+            "from": "E",
+            "alt": "high",
+            "formation": "box"
+          }
+        },
+        {
+          "t": 12.0,
+          "group": {
+            "type": "bf109",
+            "n": 4,
+            "from": "E",
+            "alt": "high",
+            "escort": "prev"
+          }
+        },
+        {
+          "t": 120.0,
+          "group": {
+            "type": "ju88",
+            "n": 3,
+            "from": "SE",
+            "alt": "mid",
+            "formation": "V"
+          }
+        },
+        {
+          "t": 122.0,
+          "group": {
+            "type": "bf109",
+            "n": 2,
+            "from": "SE",
+            "alt": "high",
+            "escort": "prev"
+          }
+        }
+      ],
+      "ace": null,
+      "dialogue": {
+        "pre": ["Wingman: Blimey, look at the size of that formation!"],
+        "mid": ["Wingman: Focus on the bombers! Don't let them through!"],
+        "post": ["Wingman: Outstanding! We've broken their attack!"]
+      }
+    },
+    {
+      "id": "M07_Final",
+      "name": "Battle of Britain Day",
+      "map": "london",
+      "briefing": "This is it—their biggest push yet. Everything we have is going up. Make history, pilot.",
+      "win": {
+        "type": "destroy_count",
+        "count": 15
+      },
+      "lose": [
+        {"type": "player_dead"},
+        {"type": "london_destroyed"}
+      ],
+      "rewards": {
+        "tokens": 2,
+        "passive": null,
+        "mods": [],
+        "unlockNext": "endless_mode"
+      },
+      "waves": [
+        {
+          "t": 10.0,
+          "wave": 1,
+          "group": {
+            "type": "mixed",
+            "bf109": 3,
+            "ju88": 2,
+            "from": "E",
+            "alt": "varied"
+          }
+        },
+        {
+          "t": 150.0,
+          "wave": 2,
+          "group": {
+            "type": "mixed",
+            "bf109": 4,
+            "ju88": 3,
+            "from": "SE",
+            "alt": "varied"
+          }
+        },
+        {
+          "t": 180.0,
+          "ace": {
+            "type": "bf109",
+            "name": "Red Baron's Ghost",
+            "from": "N",
+            "alt": "high",
+            "buffs": {
+              "speed": 1.25,
+              "turnRate": 1.25,
+              "accuracy": 1.3,
+              "health": 2.0
+            }
+          }
+        },
+        {
+          "t": 350.0,
+          "wave": 3,
+          "group": {
+            "type": "mixed",
+            "bf109": 5,
+            "ju88": 4,
+            "from": "E",
+            "alt": "varied"
+          }
+        }
+      ],
+      "dialogue": {
+        "pre": ["Wingman: This is the big show. For King and Country!"],
+        "mid": ["Wingman: They just keep coming! Stay strong!"],
+        "post": ["Wingman: We did it! Per Ardua ad Astra, old boy!"]
+      }
+    }
+  ],
+  "endless": {
+    "id": "endless_survival",
+    "name": "Endless Survival",
+    "map": "channel_coast",
+    "briefing": "Test your skills against endless waves of enemies. How long can you survive?",
+    "scaling": {
+      "baseSpawnInterval": 30,
+      "spawnIntervalDecay": 0.95,
+      "minSpawnInterval": 10,
+      "enemyCountIncrease": 1.1,
+      "enemyAccuracyIncrease": 1.05,
+      "enemyHealthIncrease": 1.02,
+      "aceSpawnChance": 0.1,
+      "aceChanceIncrease": 1.02
+    }
+  }
+}

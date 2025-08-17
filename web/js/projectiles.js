@@ -6,7 +6,7 @@
     window.shotCounter = 0; // Dedicated counter for tracer pattern
 
     // Expect window.fireRate to be optionally overridden before init
-    const defaultFireRate = 900; // rounds per minute
+    const defaultFireRate = 9000; // rounds per minute (8×.303 Brownings = ~150 rounds per second combined)
     window.fireRate = window.fireRate || defaultFireRate;
     window.fireInterval = 60000 / window.fireRate; // ms between shots
 

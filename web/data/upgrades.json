@@ -1,0 +1,49 @@
+{
+  "upgrades": {
+    "bubble_canopy": {
+      "id": "bubble_canopy",
+      "name": "Bubble Canopy",
+      "description": "Improved visibility reduces enemy identification delay by 40%",
+      "cost": 1,
+      "effects": {
+        "enemyHighlightDelay": 0.6
+      },
+      "icon": "upgrade_canopy.png",
+      "purchased": false
+    },
+    "pressurized_cockpit": {
+      "id": "pressurized_cockpit",
+      "name": "Pressurized Cockpit",
+      "description": "Increases engine efficiency by 5% above 5000m altitude",
+      "cost": 1,
+      "effects": {
+        "highAltitudeBonus": 1.05,
+        "altitudeThreshold": 5000
+      },
+      "icon": "upgrade_cockpit.png",
+      "purchased": false
+    },
+    "engine_upgrade": {
+      "id": "engine_upgrade",
+      "name": "Rolls-Royce Griffon Engine",
+      "description": "Upgrade from Merlin to Griffon: +12% top speed, +15% acceleration and climb",
+      "cost": 2,
+      "effects": {
+        "topSpeed": 1.12,
+        "acceleration": 1.15,
+        "climbRate": 1.15
+      },
+      "icon": "upgrade_engine.png",
+      "purchased": false
+    }
+  },
+  "passives": {
+    "enemy_identification": {
+      "id": "enemy_identification",
+      "name": "Enemy Identification",
+      "description": "Highlights enemy aircraft in red for easier tracking",
+      "unlocked": false,
+      "enabled": true
+    }
+  }
+}
