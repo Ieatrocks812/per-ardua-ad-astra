@@ -65,7 +65,7 @@
       });
     };
 
-    window.updateProjectiles = function updateProjectiles(dt){
+    function updateProjectiles(dt){
       if (!window.game) return;
       const SCALE = window.SCALE || 40;
       // Update bullets and tracers
@@ -102,7 +102,10 @@
         casing.life -= dt;
         if (casing.life <= 0) window.game.casings.splice(i, 1);
       }
-    };
+    }
+
+    // Expose symbol globally so index.html can call it directly
+    window.updateProjectiles = updateProjectiles;
   }
 
   // Export initializer

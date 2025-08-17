@@ -2939,9 +2939,7 @@
         
         while (accumulator >= timeStep) {
           updatePhysics(timeStep);
-          if (window.updateProjectiles) {
-            window.updateProjectiles(timeStep);
-          }
+          updateProjectiles(timeStep);
           updateEnemies(timeStep);
           updateEnemySpawning(); // Handle continuous spawning and cleanup
           updateExplosions(timeStep);
