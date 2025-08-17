@@ -336,8 +336,13 @@
         const pixelIndex = (Math.floor(spriteY) * pixelData.width + Math.floor(spriteX)) * 4;
         const alpha = pixelData.data[pixelIndex + 3]; // Alpha channel
         
+        // Debug: Log collision attempts and alpha values
+        if (game.showPixelCollision) {
+          console.log(`🎯 Pixel check: sprite=${spriteName} pos=(${spriteX.toFixed(1)}, ${spriteY.toFixed(1)}) alpha=${alpha} threshold=200`);
+        }
+        
         // Consider pixel hit if alpha > threshold (not transparent)
-        return alpha > 50; // Threshold for semi-transparent areas
+        return alpha > 200; // Higher threshold - only hit solid/opaque parts
       }
       
       function checkPlayerPixelCollision(projX, projY) {
