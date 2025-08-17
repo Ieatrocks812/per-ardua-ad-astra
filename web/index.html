@@ -134,6 +134,8 @@
       
       // Initialize game function
       function initializeGame() {
+      // Spawn protection for first few seconds
+      game.spawnShieldUntil = performance.now() + 4000; // 4s grace
 
       // =============================================================================
       // SETUP
@@ -758,6 +760,7 @@
         crashed: false,
         playerHealth: 5,
         playerMaxHealth: 5,
+        spawnShieldUntil: 0,
         inverted: false,
         gearDown: false,
         onGround: false, // Track if aircraft is on ground
@@ -1400,7 +1403,7 @@
                   }
                   
                   // Fire weapons during attack
-                  if (enemy.burstShotsRemaining > 0 && now - enemy.lastShotTime > enemy.shotInterval && (now - enemy.spawnTime > 2000)) {
+                  if (enemy.burstShotsRemaining > 0 && now - enemy.lastShotTime > enemy.shotInterval && (now - enemy.spawnTime > 2000) && (now > game.spawnShieldUntil)) {
                     fireEnemyWeapon(enemy);
                     enemy.burstShotsRemaining--;
                     enemy.lastShotTime = now;
@@ -1517,7 +1520,7 @@
                 return;
               }
 
-              if (distanceToPlayer < enemy.gunnerRange && (now - enemy.spawnTime > 2000)) {
+              if (distanceToPlayer < enemy.gunnerRange && (now - enemy.spawnTime > 2000) && (now > game.spawnShieldUntil)) {
                 // Fixed 5 rounds per second
                 enemy.gunnerShotInterval = 200;
                 // Use multiple mounts with random spread
@@ -1839,6 +1842,8 @@
       
       function checkEnemyProjectilePlayerCollision(proj, projIndex) {
         // Check if enemy bullet hits player
+        const now = performance.now();
+        if (now < game.spawnShieldUntil) return; // spawn protection
         if (checkPlayerPixelCollision(proj.x, proj.y)) {
           console.log('💥 Player hit by enemy fire!');
           
