@@ -2353,13 +2353,18 @@
               
               if (enemy.type !== 'bf109') {
                 // JU-88 bombers: Heavy nose-down pitch when damaged
-                const crashTorque = 30000 * (0.5 + crashIntensity * 0.5); // Scale with damage
+                const crashTorque = 50000 * (0.8 + crashIntensity * 0.7); // Much stronger nose-down torque
                 enemy.body.applyTorque(crashTorque, true);
                 
-                // Reduce drag significantly when pitching down
+                // Reduce drag significantly when pitching down and gain massive speed
                 const currentVel = enemy.body.getLinearVelocity();
-                const speedBoost = crashIntensity * 8000; // Extra forward force to gain speed
-                enemy.body.applyForceToCenter(pl.Vec2(currentVel.x * 0.1 + speedBoost, currentVel.y * 0.1), true);
+                const speedBoost = crashIntensity * 20000; // Much stronger forward force to gain speed for ground impact
+                const angle = enemy.body.getAngle();
+                // Apply force in the direction the aircraft is facing for more realistic dive
+                enemy.body.applyForceToCenter(pl.Vec2(
+                  Math.cos(angle) * speedBoost + currentVel.x * 0.1, 
+                  Math.sin(angle) * speedBoost + currentVel.y * 0.1
+                ), true);
               } else {
                 // BF-109 fighters: More controlled descent but still pitch down
                 if (enemy.body.setAngularDamping) enemy.body.setAngularDamping(8.0);
@@ -2520,14 +2525,19 @@
                     enemy.smoking = true;
                     console.log('💨 Ju-88 engine smoking');
                   }
+                  // JU-88s start losing stability early to ensure faster ground impact
+                  if (!enemy.pitchingDown && enemy.thrustReduction > 0.5) {
+                    enemy.pitchingDown = true;
+                    console.log('💨 JU-88 starting early descent due to engine damage');
+                  }
                 }
                 
                 if (enemy.health <= 8) {
                   enemy.liftReduction = Math.min(0.5, damageRatio * 0.6);
-                  // JU-88s start pitching down when heavily damaged
-                  if (!enemy.pitchingDown && (enemy.thrustReduction > 0.6 || enemy.liftReduction > 0.4)) {
+                  // JU-88s start pitching down when heavily damaged - made more aggressive
+                  if (!enemy.pitchingDown && (enemy.thrustReduction > 0.4 || enemy.liftReduction > 0.3)) {
                     enemy.pitchingDown = true;
-                    console.log('💨 JU-88 losing control - starting descent');
+                    console.log('💨 JU-88 losing control - starting aggressive descent');
                   }
                 }
                 
