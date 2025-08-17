@@ -129,13 +129,15 @@
         
         document.getElementById('startScreen').style.display = 'none';
         gameStarted = true;
+        // Mark game start time for spawn protection
+        window.gameStartTime = performance.now();
         initializeGame();
       });
       
       // Initialize game function
       function initializeGame() {
-      // Spawn protection for first few seconds
-      game.spawnShieldUntil = performance.now() + 4000; // 4s grace
+      // Spawn protection for first few seconds (ensure game exists)
+      try { game.spawnShieldUntil = performance.now() + 4000; } catch(e) { /* game not yet defined here; will set after state init */ }
 
       // =============================================================================
       // SETUP
@@ -771,6 +773,10 @@
         explosions: [], // explosion effects
         enemyProjectiles: [] // enemy bullets
       };
+      // Ensure spawn shield is set after game object exists
+      if (!game.spawnShieldUntil || game.spawnShieldUntil < performance.now()) {
+        game.spawnShieldUntil = performance.now() + 4000;
+      }
       
       // =============================================================================
       // INPUT
