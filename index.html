@@ -1468,7 +1468,7 @@
         function spawnEnemyFormation() {
           console.log('✈️ Spawning new enemy formation with escorts...');
           
-          const bomberAltitude = -500; // 1000m above ground in physics units (500 * VISUAL_SCALE = 1000m)
+          const bomberAltitude = -600; // 1200m above ground in physics units (600 * VISUAL_SCALE = 1200m)
           const vSpacing = 150; // 300m between aircraft in V formation
           const vOffset = 75; // 150m vertical offset for V wings
           
@@ -1671,7 +1671,10 @@
                 game.enemies.splice(i, 1);
             } else if (enemy.destroyed && hasHitGround) {
               console.log(`💥 Removing crashed enemy`);
-              world.destroyBody(enemy.body);
+              // Only destroy body if it hasn't been destroyed already
+              if (enemy.body && world.bodies.includes(enemy.body)) {
+                world.destroyBody(enemy.body);
+              }
               game.enemies.splice(i, 1);
               
               // Create ground explosion
@@ -1679,8 +1682,8 @@
                 x: pos.x,
                 y: 0, // Ground level
                 time: 0,
-                duration: 1.5,
-                size: 25,
+                duration: 2.0, // Longer duration for dramatic effect
+                size: 40, // Much larger ground explosion (80m diameter)
                 type: 'destruction'
               });
               playSound(sounds.explosion, 0.6);
@@ -2553,8 +2556,8 @@
             x: pos.x,
             y: pos.y,
             time: 0,
-            duration: 1.0, // 1 second explosion
-            size: 20, // 40m explosion diameter
+            duration: 1.5, // 1.5 second explosion
+            size: 35, // 70m explosion diameter - larger ground explosion
             type: 'destruction' // Mark as destruction explosion
           });
           
@@ -2563,6 +2566,19 @@
           
           // Remove body from physics world
           world.destroyBody(enemy.body);
+          
+          // Immediately remove from enemies array to make it disappear completely
+          const enemyIndex = game.enemies.indexOf(enemy);
+          if (enemyIndex > -1) {
+            game.enemies.splice(enemyIndex, 1);
+            console.log('🗑️ Enemy immediately removed from game arrays');
+          }
+          
+          // Notify mission manager if in campaign mode
+          if (window.missionManager && window.campaignMode) {
+            const enemyType = enemy.isAce ? 'ace' : enemy.type;
+            window.missionManager.onEnemyDestroyed(enemyType);
+          }
         }
         
         function updateExplosions(dt) {
@@ -4731,7 +4747,7 @@
         switch(spawnData.altitude || spawnData.alt) {
           case 'low': spawnY = -100; break;  // 200m
           case 'mid': spawnY = -250; break;  // 500m
-          case 'high': spawnY = -500; break; // 1000m
+          case 'high': spawnY = -600; break; // 1200m
           default: spawnY = playerPos.y - 50; // Slightly above player
         }
         
@@ -4796,7 +4812,7 @@
         switch(spawnData.altitude || spawnData.alt) {
           case 'low': spawnY = -150; break;
           case 'mid': spawnY = -300; break;
-          case 'high': spawnY = -500; break;
+          case 'high': spawnY = -600; break;
           default: spawnY = playerPos.y - 100; // Above player
         }
         
