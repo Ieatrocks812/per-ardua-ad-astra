@@ -885,16 +885,12 @@
       // GUNS AND PROJECTILES
       // =============================================================================
       
-      let lastFireTime = 0;
-      let shotCounter = 0; // Dedicated counter for tracer pattern
-      const fireRate = 900; // rounds per minute (faster)
-      const fireInterval = 60000 / fireRate; // ms between shots
-      
-              // Projectile size settings (world units - stays same relative to plane/map regardless of zoom)
-        const BULLET_SIZE = 5; // world units
-        const TRACER_LENGTH = 2.0; // world units - doubled for longer tracers
-        const TRACER_WIDTH = 0.2; // world units - doubled for thicker tracers
-        const CASING_SIZE = 3; // world units (much smaller casings)
+      // Initialize external projectiles module (after aircraft/world exist)
+      setTimeout(() => {
+        if (window.initProjectiles) {
+          window.initProjectiles();
+        }
+      }, 0);
         
         // =============================================================================
         // ENEMY SYSTEM
@@ -1052,7 +1048,7 @@
               shotInterval: 100, // 100ms between shots in a burst
               burstSize: 3 + Math.floor(Math.random() * 3), // 3-5 shot bursts
               burstCooldownTime: 1000 + Math.random() * 1000, // 1-2s between bursts
-              facingDirection: 'left', // Track which sprite to use
+              facingDirection: 'right', // Track which sprite to use (right sprite when flying left)
               // Advanced AI parameters
               skillLevel: Math.random() > 0.8 ? 'ace' : 'regular', // 20% chance of ace pilot
               aggressiveness: 0.5 + Math.random() * 0.5, // 0.5-1.0 aggression factor
@@ -1270,7 +1266,7 @@
                     }
                   }
                   enemy.targetSpeed = 100;
-                  enemy.facingDirection = 'left';
+                  enemy.facingDirection = 'right'; // Flying left means showing right-facing sprite
                   break;
                   
                 case 'engage':
@@ -1319,7 +1315,7 @@
                   // Ace pilots turn faster
                   const turnRate = enemy.skillLevel === 'ace' ? 30000 : 20000;
                   enemy.body.applyTorque(angleDiff * turnRate, true);
-                  enemy.facingDirection = Math.cos(angleToIntercept) > 0 ? 'right' : 'left';
+                  enemy.facingDirection = Math.cos(angleToIntercept) < 0 ? 'right' : 'left';
                   enemy.targetSpeed = 140;
                   break;
                   
@@ -1354,7 +1350,7 @@
                   while (aDiff < -Math.PI) aDiff += 2 * Math.PI;
                   
                   enemy.body.applyTorque(aDiff * 25000, true);
-                  enemy.facingDirection = Math.cos(attackAngle) > 0 ? 'right' : 'left';
+                  enemy.facingDirection = Math.cos(attackAngle) < 0 ? 'right' : 'left';
                   enemy.targetSpeed = 160; // Full speed during attack
                   break;
                   
@@ -1411,7 +1407,7 @@
                     enemy.aiState = 'engage';
                     enemy.stateTimer = 0;
                   }
-                  enemy.facingDirection = Math.cos(angle) > 0 ? 'right' : 'left';
+                  enemy.facingDirection = Math.cos(angle) < 0 ? 'right' : 'left';
                   break;
                   
                 case 'disengage':
@@ -1420,7 +1416,7 @@
                   enemy.targetAltitude = pos.y - 50; // Climb away
                   const escapeAngle = Math.atan2(pos.y - playerPos.y, pos.x - playerPos.x);
                   enemy.body.setAngle(escapeAngle);
-                  enemy.facingDirection = Math.cos(escapeAngle) > 0 ? 'right' : 'left';
+                  enemy.facingDirection = Math.cos(escapeAngle) < 0 ? 'right' : 'left';
                   
                   if (distanceToPlayer > 400 || enemy.stateTimer > 5) {
                     enemy.aiState = 'patrol';
@@ -2583,7 +2579,10 @@
                 ctx.globalAlpha = 0.9;
               }
               
+              // Flip vertically to correct upside-down orientation
+              ctx.scale(1, -1);
               ctx.drawImage(sprite, -width/2, -height/2, width, height);
+              ctx.scale(1, -1); // Reset scale
               
               // Reset shadow and alpha
               ctx.shadowBlur = 0;
@@ -2940,7 +2939,9 @@
         
         while (accumulator >= timeStep) {
           updatePhysics(timeStep);
-          updateProjectiles(timeStep);
+          if (window.updateProjectiles) {
+            window.updateProjectiles(timeStep);
+          }
           updateEnemies(timeStep);
           updateEnemySpawning(); // Handle continuous spawning and cleanup
           updateExplosions(timeStep);
@@ -2964,5 +2965,6 @@
       
     })();
   </script>
+  <script src="/web/js/projectiles.js"></script>
 </body>
 </html>
