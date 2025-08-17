@@ -420,8 +420,8 @@
         if (!sprite || !pixelData) {
           // Fallback to very small distance-based collision if no pixel data
           const distance = Math.sqrt((projX - pos.x) * (projX - pos.x) + (projY - pos.y) * (projY - pos.y));
-          console.log(`⚠️ Using fallback player collision (no pixel data). Distance: ${distance.toFixed(2)}`);
-          return distance < 0.8; // Very small fallback - only 1.6m visual radius
+          console.log(`⚠️ Using fallback player collision (no pixel data). Distance: ${distance.toFixed(2)}, sprite: ${spriteName}, hasSprite: ${!!sprite}, hasPixelData: ${!!pixelData}`);
+          return distance < 0.4; // Even smaller fallback - only 0.8m visual radius
         }
         
         // Use colored bounds instead of full sprite dimensions for much more accurate collision
@@ -485,7 +485,7 @@
           
           // Debug logging
           if (game.showPixelCollision) {
-            console.log(`🎯 Colored bounds check: sprite=${spriteName} bounds=(${spriteX.toFixed(1)}, ${spriteY.toFixed(1)}) alpha=${alpha} hasColor=${red > 10 || green > 10 || blue > 10}`);
+            console.log(`🎯 Colored bounds check: sprite=${spriteName} bounds=(${spriteX.toFixed(1)}, ${spriteY.toFixed(1)}) alpha=${alpha} hasColor=${red > 10 || green > 10 || blue > 10} rgb=(${red},${green},${blue}) coloredBounds=${coloredBounds.left}-${coloredBounds.right},${coloredBounds.top}-${coloredBounds.bottom}`);
           }
           
           // Must have both significant alpha AND actual color content
@@ -2166,7 +2166,7 @@
         const now = performance.now();
         if (now < game.spawnShieldUntil) return; // spawn protection
         if (checkPlayerPixelCollision(proj.x, proj.y)) {
-          console.log('💥 Player hit by enemy fire!');
+          console.log(`💥 Player hit by enemy fire! Projectile: ${proj.type || 'unknown'} at (${proj.x.toFixed(1)}, ${proj.y.toFixed(1)})`);
           
           // Create hit explosion effect
           game.explosions.push({
