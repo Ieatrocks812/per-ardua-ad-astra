@@ -777,7 +777,17 @@
         enemies: [], // enemy aircraft
         explosions: [], // explosion effects
         enemyProjectiles: [], // enemy bullets
-        playerCollisionCooldownUntil: 0
+        playerCollisionCooldownUntil: 0,
+        debug: {
+          showMenu: false,
+          godMode: false,
+          enemiesStopFiring: false,
+          showFPS: false,
+          showPhysicsInfo: false,
+          unlimitedAmmo: false,
+          noRecoil: false,
+          enemiesStopMoving: false
+        }
       };
       // Ensure spawn shield is set after game object exists
       if (!game.spawnShieldUntil || game.spawnShieldUntil < performance.now()) {
@@ -807,6 +817,61 @@
         if (key === 'v') {
           game.showPixelCollision = !game.showPixelCollision;
           console.log('🎯 Pixel collision debug:', game.showPixelCollision ? 'ON' : 'OFF');
+        }
+        
+        // Toggle debug menu
+        if (key === 'h') {
+          game.debug.showMenu = !game.debug.showMenu;
+          console.log('🛠️ Debug menu:', game.debug.showMenu ? 'OPEN' : 'CLOSED');
+        }
+        
+        // Debug menu shortcuts (when debug menu is open)
+        if (game.debug.showMenu) {
+          if (key === '1') {
+            game.debug.godMode = !game.debug.godMode;
+            console.log('🛡️ God Mode:', game.debug.godMode ? 'ON' : 'OFF');
+          }
+          if (key === '2') {
+            game.debug.enemiesStopFiring = !game.debug.enemiesStopFiring;
+            console.log('🔫 Enemies Stop Firing:', game.debug.enemiesStopFiring ? 'ON' : 'OFF');
+          }
+          if (key === '3') {
+            game.debug.showFPS = !game.debug.showFPS;
+            console.log('📊 Show FPS:', game.debug.showFPS ? 'ON' : 'OFF');
+          }
+          if (key === '4') {
+            game.debug.showPhysicsInfo = !game.debug.showPhysicsInfo;
+            console.log('⚡ Show Physics Info:', game.debug.showPhysicsInfo ? 'ON' : 'OFF');
+          }
+          if (key === '5') {
+            game.debug.unlimitedAmmo = !game.debug.unlimitedAmmo;
+            console.log('🎯 Unlimited Ammo:', game.debug.unlimitedAmmo ? 'ON' : 'OFF');
+          }
+          if (key === '6') {
+            game.debug.noRecoil = !game.debug.noRecoil;
+            console.log('🎯 No Recoil:', game.debug.noRecoil ? 'ON' : 'OFF');
+          }
+          if (key === '7') {
+            game.debug.enemiesStopMoving = !game.debug.enemiesStopMoving;
+            console.log('✈️ Enemies Stop Moving:', game.debug.enemiesStopMoving ? 'ON' : 'OFF');
+          }
+          if (key === '8') {
+            // Spawn enemy formation manually
+            spawnEnemyFormation();
+            console.log('✈️ Spawned enemy formation');
+          }
+          if (key === '9') {
+            // Clear all enemies
+            game.enemies.forEach(enemy => destroyEnemy(enemy));
+            game.enemies = [];
+            console.log('💥 Cleared all enemies');
+          }
+          if (key === '0') {
+            // Full heal player
+            game.playerHealth = game.playerMaxHealth;
+            game.crashed = false;
+            console.log('❤️ Player fully healed');
+          }
         }
         
         // Toggle inverted flight mode
@@ -1148,6 +1213,11 @@
         
         // Function to make enemy aircraft fire their weapons
         function fireEnemyWeapon(enemy) {
+          // Check debug setting to stop enemies from firing
+          if (game.debug.enemiesStopFiring) {
+            return;
+          }
+          
           const pos = enemy.body.getPosition();
           const vel = enemy.body.getLinearVelocity();
           const angle = enemy.body.getAngle();
@@ -1265,6 +1335,13 @@
         function updateEnemies(dt) {
           game.enemies.forEach(enemy => {
             if (enemy.destroyed && !enemy.pitchingDown) return; // Allow crashing aircraft to continue updating
+            
+            // Debug: Stop enemy movement
+            if (game.debug.enemiesStopMoving) {
+              enemy.body.setLinearVelocity(pl.Vec2(0, 0));
+              enemy.body.setAngularVelocity(0);
+              return;
+            }
             
             const pos = enemy.body.getPosition();
             const vel = enemy.body.getLinearVelocity();
@@ -1531,7 +1608,7 @@
                 return;
               }
 
-              if (distanceToPlayer < enemy.gunnerRange && (now - enemy.spawnTime > 2000) && (now > game.spawnShieldUntil)) {
+              if (distanceToPlayer < enemy.gunnerRange && (now - enemy.spawnTime > 2000) && (now > game.spawnShieldUntil) && !game.debug.enemiesStopFiring) {
                 // Fixed 5 rounds per second
                 enemy.gunnerShotInterval = 200;
                 // Use multiple mounts with random spread
@@ -1874,13 +1951,17 @@
           // Remove projectile
           game.enemyProjectiles.splice(projIndex, 1);
           
-          // Player damage system
-          // Use hit points: each hit removes 1 (both bullet and tracer)
-          const damage = 1;
-          game.playerHealth = Math.max(0, game.playerHealth - damage);
-          if (game.playerHealth <= 0 && !game.crashed) {
-            console.log('💀 Player destroyed!');
-            game.crashed = true;
+          // Player damage system (check god mode)
+          if (!game.debug.godMode) {
+            // Use hit points: each hit removes 1 (both bullet and tracer)
+            const damage = 1;
+            game.playerHealth = Math.max(0, game.playerHealth - damage);
+            if (game.playerHealth <= 0 && !game.crashed) {
+              console.log('💀 Player destroyed!');
+              game.crashed = true;
+            }
+          } else {
+            console.log('🛡️ God mode: projectile damage ignored');
           }
         }
       }
@@ -2081,11 +2162,15 @@
             
             // Direct collision damage: only on actual physical impact, not proximity
             console.log('💥 Direct collision with enemy aircraft!');
-            game.playerHealth = Math.max(0, game.playerHealth - 2); // Higher damage for direct collision
-            enemy.health = Math.max(0, enemy.health - 3);
-            if (game.playerHealth <= 0) {
-              game.crashed = true;
+            if (!game.debug.godMode) {
+              game.playerHealth = Math.max(0, game.playerHealth - 2); // Higher damage for direct collision
+              if (game.playerHealth <= 0) {
+                game.crashed = true;
+              }
+            } else {
+              console.log('🛡️ God mode: collision damage ignored');
             }
+            enemy.health = Math.max(0, enemy.health - 3);
             
             // Destroy enemy if killed
             if (enemy.health <= 0) {
@@ -3022,6 +3107,121 @@
           const crashDiv = document.querySelector('.crash-indicator');
           if (crashDiv) crashDiv.remove();
         }
+        
+        // Debug menu overlay
+        if (game.debug.showMenu) {
+          const debugDiv = document.querySelector('.debug-menu') || (() => {
+            const div = document.createElement('div');
+            div.className = 'debug-menu';
+            div.style.cssText = `
+              position: fixed;
+              top: 10px;
+              right: 10px;
+              background: rgba(0, 0, 0, 0.8);
+              color: lime;
+              padding: 15px;
+              font-family: monospace;
+              font-size: 14px;
+              border: 2px solid lime;
+              border-radius: 5px;
+              min-width: 300px;
+              z-index: 1000;
+            `;
+            document.body.appendChild(div);
+            return div;
+          })();
+          
+          debugDiv.innerHTML = `
+            <div style="color: yellow; font-weight: bold; margin-bottom: 10px;">🛠️ DEBUG MENU (H to toggle)</div>
+            <div>1. God Mode: <span style="color: ${game.debug.godMode ? 'lime' : 'red'}">${game.debug.godMode ? 'ON' : 'OFF'}</span></div>
+            <div>2. Stop Enemy Firing: <span style="color: ${game.debug.enemiesStopFiring ? 'lime' : 'red'}">${game.debug.enemiesStopFiring ? 'ON' : 'OFF'}</span></div>
+            <div>3. Show FPS: <span style="color: ${game.debug.showFPS ? 'lime' : 'red'}">${game.debug.showFPS ? 'ON' : 'OFF'}</span></div>
+            <div>4. Physics Info: <span style="color: ${game.debug.showPhysicsInfo ? 'lime' : 'red'}">${game.debug.showPhysicsInfo ? 'ON' : 'OFF'}</span></div>
+            <div>5. Unlimited Ammo: <span style="color: ${game.debug.unlimitedAmmo ? 'lime' : 'red'}">${game.debug.unlimitedAmmo ? 'ON' : 'OFF'}</span></div>
+            <div>6. No Recoil: <span style="color: ${game.debug.noRecoil ? 'lime' : 'red'}">${game.debug.noRecoil ? 'ON' : 'OFF'}</span></div>
+            <div>7. Stop Enemy Movement: <span style="color: ${game.debug.enemiesStopMoving ? 'lime' : 'red'}">${game.debug.enemiesStopMoving ? 'ON' : 'OFF'}</span></div>
+            <div style="margin-top: 10px; border-top: 1px solid #666; padding-top: 10px;">
+              <div>8. Spawn Enemies</div>
+              <div>9. Clear All Enemies</div>
+              <div>0. Heal Player</div>
+            </div>
+            <div style="margin-top: 10px; color: #ccc; font-size: 12px;">
+              Press number keys to toggle options
+            </div>
+          `;
+        } else {
+          const debugDiv = document.querySelector('.debug-menu');
+          if (debugDiv) debugDiv.remove();
+        }
+        
+        // FPS display
+        if (game.debug.showFPS) {
+          const fpsDiv = document.querySelector('.fps-display') || (() => {
+            const div = document.createElement('div');
+            div.className = 'fps-display';
+            div.style.cssText = `
+              position: fixed;
+              top: 10px;
+              left: 10px;
+              background: rgba(0, 0, 0, 0.7);
+              color: lime;
+              padding: 5px 10px;
+              font-family: monospace;
+              font-size: 16px;
+              border-radius: 3px;
+              z-index: 1000;
+            `;
+            document.body.appendChild(div);
+            return div;
+          })();
+          fpsDiv.textContent = `FPS: ${currentFPS}`;
+        } else {
+          const fpsDiv = document.querySelector('.fps-display');
+          if (fpsDiv) fpsDiv.remove();
+        }
+        
+        // Physics info display
+        if (game.debug.showPhysicsInfo) {
+          const physicsDiv = document.querySelector('.physics-display') || (() => {
+            const div = document.createElement('div');
+            div.className = 'physics-display';
+            div.style.cssText = `
+              position: fixed;
+              bottom: 10px;
+              left: 10px;
+              background: rgba(0, 0, 0, 0.7);
+              color: cyan;
+              padding: 10px;
+              font-family: monospace;
+              font-size: 12px;
+              border-radius: 3px;
+              z-index: 1000;
+              max-width: 300px;
+            `;
+            document.body.appendChild(div);
+            return div;
+          })();
+          
+          const pos = aircraft.getPosition();
+          const vel = aircraft.getLinearVelocity();
+          const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+          const angVel = aircraft.getAngularVelocity();
+          
+          physicsDiv.innerHTML = `
+            <div><strong>PHYSICS DEBUG</strong></div>
+            <div>Position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})</div>
+            <div>Velocity: (${vel.x.toFixed(1)}, ${vel.y.toFixed(1)})</div>
+            <div>Speed: ${(speed * VISUAL_SCALE).toFixed(1)} m/s</div>
+            <div>Angular Vel: ${angVel.toFixed(2)} rad/s</div>
+            <div>Enemies: ${game.enemies.length}</div>
+            <div>Projectiles: ${game.projectiles.length}</div>
+            <div>Enemy Projectiles: ${game.enemyProjectiles.length}</div>
+            <div>Casings: ${game.casings.length}</div>
+          `;
+        } else {
+          const physicsDiv = document.querySelector('.physics-display');
+          if (physicsDiv) physicsDiv.remove();
+        }
       }
       
       function updateCamera() {
@@ -3038,10 +3238,23 @@
       const timeStep = 1/60;
       let accumulator = 0;
       
+      // FPS tracking
+      let frameCount = 0;
+      let fpsLastTime = performance.now();
+      let currentFPS = 0;
+      
       function gameLoop(time) {
         const dt = Math.min((time - lastTime) / 1000, 0.05);
         lastTime = time;
         accumulator += dt;
+        
+        // FPS calculation
+        frameCount++;
+        if (time - fpsLastTime >= 1000) {
+          currentFPS = Math.round(frameCount * 1000 / (time - fpsLastTime));
+          frameCount = 0;
+          fpsLastTime = time;
+        }
         
         while (accumulator >= timeStep) {
           updatePhysics(timeStep);
