@@ -71,7 +71,13 @@
       // Update bullets and tracers
       for (let i = window.game.projectiles.length - 1; i >= 0; i--) {
         const proj = window.game.projectiles[i];
-        // Drag
+        // Gravity (bullet drop) for bullets and tracers
+        if (proj.type === 'bullet' || proj.type === 'tracer') {
+          // World uses y+ downward; apply positive gravity
+          proj.vy += 9.81 * dt;
+        }
+
+        // Drag (speed-reducing, creates arc with gravity)
         const speed = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy);
         const dragCoeff = 0.02;
         const drag = dragCoeff * speed;
