@@ -1371,8 +1371,8 @@
             
             const enemy = {
               body: enemyBody,
-              health: 5,
-              maxHealth: 5,
+              health: 50,
+              maxHealth: 50,
               targetSpeed: 80,
               destroyed: false,
               thrustReduction: 0,
@@ -1418,8 +1418,8 @@
             
             const enemy = {
               body: enemyBody,
-              health: 3,
-              maxHealth: 3,
+              health: 10,
+              maxHealth: 10,
               targetSpeed: 100,
               destroyed: false,
               thrustReduction: 0,
@@ -1516,8 +1516,8 @@
             // Enemy data with reduced health for faster damage
             const enemy = {
               body: enemyBody,
-              health: 5, // Reduced from 10 for faster damage
-              maxHealth: 5,
+              health: 50, // JU-88 bomber health
+              maxHealth: 50,
               targetSpeed: 80,
               destroyed: false,
               thrustReduction: 0, // Progressive thrust loss (0-1)
@@ -1578,8 +1578,8 @@
             // BF-109 escort data with enhanced AI
             const escort = {
               body: escortBody,
-              health: 3, // Lower health than bombers
-              maxHealth: 3,
+              health: 10, // Fighter health
+              maxHealth: 10,
               targetSpeed: 120, // Faster than bombers
               destroyed: false,
               thrustReduction: 0,
@@ -1851,14 +1851,14 @@
               
               // Limit angular velocity to prevent wild spinning
               const w = enemy.body.getAngularVelocity();
-              const maxW = enemy.onFire || enemy.liftReduction > 0.5 || enemy.thrustReduction > 0.6 || enemy.health <= 1 ? 0.8 : 2.0;
+              const maxW = enemy.onFire || enemy.liftReduction > 0.5 || enemy.thrustReduction > 0.6 || enemy.health <= 2 ? 0.8 : 2.0;
               if (Math.abs(w) > maxW) {
                 const clamped = Math.max(-maxW, Math.min(maxW, w));
                 enemy.body.setAngularVelocity(clamped * 0.9);
               }
               
               // For heavily damaged BF-109s, apply additional stabilization
-              const bf109Damaged = enemy.onFire || enemy.liftReduction > 0.5 || enemy.thrustReduction > 0.6 || enemy.health <= 1;
+              const bf109Damaged = enemy.onFire || enemy.liftReduction > 0.5 || enemy.thrustReduction > 0.6 || enemy.health <= 2;
               if (bf109Damaged) {
                 // Keep a small forward force to avoid rotating about a point
                 const forwardForce = Math.max(4000, (1 - (enemy.thrustReduction || 0)) * 12000);
@@ -2402,7 +2402,7 @@
               playSound(sounds.hit, 0.2);
               
               // Damage enemy based on weapon configuration
-              const weaponDamage = game.weaponConfig?.damage || 0.015; // Default to .303 damage
+              const weaponDamage = game.weaponConfig?.damage || 1; // Default to .303 damage
               enemy.health -= weaponDamage;
               
               // Remove projectile
@@ -2417,7 +2417,7 @@
                 if (enemy.aiState !== 'evade' && enemy.aiState !== 'boom_zoom') {
                   // Higher chance to evade if damaged or ace pilot
                   const evasionChance = enemy.skillLevel === 'ace' ? 0.8 : 0.6;
-                  if (Math.random() < evasionChance || enemy.health <= 1) {
+                  if (Math.random() < evasionChance || enemy.health <= 2) {
                     enemy.previousState = enemy.aiState;
                     enemy.aiState = 'evade';
                     enemy.stateTimer = 0;
@@ -2484,8 +2484,8 @@
               const damageRatio = 1 - (enemy.health / enemy.maxHealth);
               
               if (enemy.type === 'bf109') {
-                // BF-109 damage thresholds (lower health)
-                if (enemy.health <= 2) {
+                // BF-109 damage thresholds (10 health total)
+                if (enemy.health <= 6) {
                   enemy.thrustReduction = Math.min(0.7, damageRatio * 1.0);
                   if (!enemy.smoking) {
                     enemy.smoking = true;
@@ -2493,7 +2493,7 @@
                   }
                 }
                 
-                if (enemy.health <= 1.5) {
+                if (enemy.health <= 4) {
                   enemy.liftReduction = Math.min(0.4, damageRatio * 0.5);
                   // Start losing control and pitching down when moderately damaged
                   if (!enemy.pitchingDown && (enemy.thrustReduction > 0.5 || enemy.liftReduction > 0.3)) {
@@ -2502,7 +2502,7 @@
                   }
                 }
                 
-                if (enemy.health <= 1) {
+                if (enemy.health <= 2) {
                   enemy.liftReduction = Math.min(0.6, damageRatio * 0.7);
                   if (!enemy.onFire) {
                     enemy.onFire = true;
@@ -2510,8 +2510,8 @@
                   }
                 }
               } else {
-                // Ju-88 damage thresholds (higher health)
-                if (enemy.health <= 3) {
+                // Ju-88 damage thresholds (50 health total)
+                if (enemy.health <= 30) {
                   enemy.thrustReduction = Math.min(0.8, damageRatio * 1.2);
                   if (!enemy.smoking) {
                     enemy.smoking = true;
@@ -2519,7 +2519,7 @@
                   }
                 }
                 
-                if (enemy.health <= 2.5) {
+                if (enemy.health <= 20) {
                   enemy.liftReduction = Math.min(0.5, damageRatio * 0.6);
                   // JU-88s start pitching down when heavily damaged
                   if (!enemy.pitchingDown && (enemy.thrustReduction > 0.6 || enemy.liftReduction > 0.4)) {
@@ -2528,7 +2528,7 @@
                   }
                 }
                 
-                if (enemy.health <= 2) {
+                if (enemy.health <= 10) {
                   enemy.liftReduction = Math.min(0.7, damageRatio * 0.9);
                   if (!enemy.onFire) {
                     enemy.onFire = true;
@@ -4885,13 +4885,13 @@
             name: 'BF-109', 
             sprites: ['bf109Left'],
             hitboxSize: { width: 18, height: 7 },
-            maxHealth: 3
+            maxHealth: 10
           },
           enemy_ju88: { 
             name: 'Ju-88', 
             sprites: ['ju88'],
             hitboxSize: { width: 30, height: 12 },
-            maxHealth: 5
+            maxHealth: 50
           }
         };
         
