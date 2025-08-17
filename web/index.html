@@ -1313,7 +1313,7 @@
               switch(enemy.aiState) {
                 case 'patrol':
                   // Patrol: Stay with formation, scan for threats
-                  if (distanceToPlayer < 200) { // 400m detection range
+                  if (distanceToPlayer < 150) { // tighter detection range
                     enemy.aiState = 'engage';
                     enemy.stateTimer = 0;
                     enemy.target = aircraft;
@@ -1400,7 +1400,7 @@
                   }
                   
                   // Fire weapons during attack
-                  if (enemy.burstShotsRemaining > 0 && now - enemy.lastShotTime > enemy.shotInterval) {
+                  if (enemy.burstShotsRemaining > 0 && now - enemy.lastShotTime > enemy.shotInterval && (now - enemy.spawnTime > 2000)) {
                     fireEnemyWeapon(enemy);
                     enemy.burstShotsRemaining--;
                     enemy.lastShotTime = now;
@@ -1517,7 +1517,7 @@
                 return;
               }
 
-              if (distanceToPlayer < enemy.gunnerRange) {
+              if (distanceToPlayer < enemy.gunnerRange && (now - enemy.spawnTime > 2000)) {
                 // Fixed 5 rounds per second
                 enemy.gunnerShotInterval = 200;
                 // Use multiple mounts with random spread
